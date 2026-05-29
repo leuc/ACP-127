@@ -61,6 +61,10 @@ class ConvertAttributesToNamed(Rule):
     consequence = [RemoveMatch, AppendMatch]
 
     def when(self, matches, context):
+        existing = {
+            m.name.lower() for m in matches if not m.private and not m.marker and m.name
+        }
+
         to_remove = []
         to_append = []
         for match in matches.named("attribute"):
@@ -69,6 +73,9 @@ class ConvertAttributesToNamed(Rule):
                 key = m.group("key").strip()
                 val = m.group("value").strip()
                 if key:
+                    if key.lower() in existing:
+                        to_remove.append(match)
+                        continue
                     to_remove.append(match)
                     to_append.append(
                         Match(

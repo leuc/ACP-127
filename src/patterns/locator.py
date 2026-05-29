@@ -14,7 +14,7 @@ def locator():
 
     rebulk.regex(
         r"(?m)^Locator:\s*.*(?:\n[ \t]+.*)*",
-        name="locator",
+        name="Locator",
         tags=["attribute"],
         flags=re.IGNORECASE,
         formatter=lambda s: s[len("Locator:") :].strip()
@@ -33,7 +33,7 @@ class TagLocatorTextOnline(Rule):
     priority = 64
 
     def when(self, matches, context):
-        for match in matches.named("locator"):
+        for match in matches.named("Locator"):
             if re.search(r"\bTEXT\s+ON-LINE\b", match.value, re.IGNORECASE):
                 match.tags.append("text-online")
         return False
