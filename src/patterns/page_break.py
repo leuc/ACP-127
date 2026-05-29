@@ -9,7 +9,9 @@ from rebulk import Rebulk, Rule, RemoveMatch, AppendMatch
 from rebulk.match import Match
 from rebulk.remodule import re
 
-_KNOWN_END_MARKERS = {"NNN", "NNNN", "NNNNMAFVVZCZ"}
+from ..rules.split import MessageContentRegion
+
+_KNOWN_END_MARKERS = {"NNN", "NNNN", "NNNNMAFVVZCZ", "<< END OF DOCUMENT >>"}
 
 
 def page_break():
@@ -17,7 +19,7 @@ def page_break():
     rebulk = Rebulk()
 
     rebulk.regex(
-        r"^PAGE\s+\d+",
+        r"^PAGE\s+\d+.*",
         name="page_break",
         tags=["page_break"],
         flags=re.MULTILINE | re.IGNORECASE,
@@ -86,20 +88,35 @@ class CollectPageBreaks(Rule):
 
 
 class CollectEndMarkers(Rule):
-    """Collect end-of-message markers for internal use.
+    """Collect end-of-message markers within message content for internal use.
 
-    Private matches so they don't appear in output.
+    Only end markers between Message Text and Message Attributes markers
+    are kept — markers outside the content region are simply removed.
+    Private so they don't appear in output.
     """
 
     priority = 32
+    dependence = MessageContentRegion
     consequence = [RemoveMatch, AppendMatch]
 
     def when(self, matches, context):
-        markers = list(matches.named("end_marker"))
-        if not markers:
+        text_ms = matches.markers.named("message_text_marker")
+        attr_ms = matches.markers.named("message_attributes_marker")
+
+        all_markers = list(matches.named("end_marker"))
+        if not all_markers:
             return False
 
-        to_remove = list(markers)
+        if len(text_ms) == 1 and len(attr_ms) == 1:
+            rs, re = text_ms[0].end, attr_ms[0].start
+            markers = [m for m in all_markers if rs <= m.start < re]
+        else:
+            markers = list(all_markers)
+
+        if not markers:
+            return list(all_markers), []
+
+        to_remove = list(all_markers)
         to_append = [
             Match(
                 markers[0].start,

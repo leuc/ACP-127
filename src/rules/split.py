@@ -83,24 +83,35 @@ class MessageContentRegion(Rule):
 
         raw = matches.input_string[text_end:attr_start]
 
-        # Strip content footer markers at higher priority
-        # (*** Current Handling Restrictions / Classification ***)
-        # before page break / classification marker lines.
-        # Using rebulk match positions avoids offset issues that
-        # a second regex pass on the processed value would have.
+        # Strip markers and page breaks for continuous body text.
         ranges = []
-        for m in matches.named("content_footer_marker"):
-            if text_end <= m.start < attr_start:
-                ranges.append((m.start - text_end, m.end - text_end))
-        for pb in matches.named("page_break"):
-            if text_end <= pb.start < attr_start:
-                ranges.append((pb.start - text_end, pb.end - text_end))
         for cm in matches.named("classification_marker"):
             if text_end <= cm.start < attr_start:
                 ranges.append((cm.start - text_end, cm.end - text_end))
+        for pb in matches.named("page_break"):
+            if text_end <= pb.start < attr_start:
+                start = pb.start - text_end
+                end = pb.end - text_end
+                while start > 0 and raw[start - 1] in "\n\r":
+                    start -= 1
+                while end < len(raw) and raw[end] in "\n\r":
+                    end += 1
+                ranges.append((start, end))
+        for m in matches.named("content_footer_marker"):
+            if text_end <= m.start < attr_start:
+                ranges.append((m.start - text_end, m.end - text_end))
+        for m in matches.named("end_marker"):
+            if text_end <= m.start < attr_start:
+                ranges.append((m.start - text_end, m.end - text_end))
         if ranges:
-            ranges.sort(reverse=True)
-            for start, end in ranges:
+            ranges.sort()
+            merged = [list(ranges[0])]
+            for start, end in ranges[1:]:
+                if start <= merged[-1][1]:
+                    merged[-1][1] = max(merged[-1][1], end)
+                else:
+                    merged.append([start, end])
+            for start, end in reversed(merged):
                 raw = raw[:start] + raw[end:]
 
         m = Match(
