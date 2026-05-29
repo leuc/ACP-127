@@ -6,7 +6,7 @@ not part of the original ACP-127 telegram text.
 
 from rebulk import Rebulk, Rule, RemoveMatch
 
-from ..rules.split import ValidateSingleMessageAttributes
+from ..rules.validate import ValidateSingleMessageAttributes
 
 _MARKING_STRINGS = [
     "Sheryl P. Walter Declassified/Released US Department of State EO Systematic Review 20 Mar 2014",
@@ -34,8 +34,8 @@ class CollectMarkings(Rule):
     """Remove marking lines that fall outside the validated content region.
 
     Runs after ValidateSingleMessageAttributes to ensure the content
-    region boundaries are known.  Markings within the region are left
-    intact for MessageContentRegion to strip.
+    region boundaries are known.  Remaining marking lines within the
+    region are handled by FinalizeMessageContent.
     """
 
     priority = 200
@@ -43,8 +43,6 @@ class CollectMarkings(Rule):
     consequence = RemoveMatch
 
     def when(self, matches, context):
-        from ..rules.split import ValidateSingleMessageAttributes
-
         text_ms = matches.markers.named("message_text_marker")
         attr_ms = matches.markers.named("message_attributes_marker")
 

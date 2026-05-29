@@ -1,7 +1,7 @@
 """Parse the distribution section (ACTION/INFO addressee codes with copy counts).
 
 Appears at the start of message content, before the dash counter line.
-Parsed after page-break removal via dependency on MessageContentRegion.
+Parsed after page-break removal via dependency on BuildMessageContent.
 
 Output fields:
   _distribution — {raw, ACTION: {CODE: count, ...}, INFO: {CODE: count, ...}}
@@ -11,7 +11,7 @@ from rebulk import Rebulk, Rule, AppendMatch
 from rebulk.match import Match
 from rebulk.remodule import re
 
-from ..rules.split import MessageContentRegion
+from ..rules.message_content import BuildMessageContent
 
 _DASH_RE = re.compile(r"^\s{4,}\-{10,}\s*\d+", re.MULTILINE)
 _CODE_RE = re.compile(r"(?P<code>\w+)-(?P<count>\d+)")
@@ -85,7 +85,7 @@ class ParseDistribution(Rule):
     """
 
     priority = 64
-    dependency = MessageContentRegion
+    dependency = BuildMessageContent
     consequence = AppendMatch
 
     def when(self, matches, context):

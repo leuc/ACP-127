@@ -8,13 +8,18 @@ from .patterns.attributes import attributes
 from .patterns.classification import classification
 from .patterns.declass_markings import declass_markings
 from .patterns.page_break import page_break
+from .patterns.dash_counter import dash_counter
 from .patterns.dtg import dtg
 from .patterns.distribution import distribution
-from .rules.split import (
+from .rules.validate import (
     ValidateSingleMessageText,
     ValidateSingleMessageAttributes,
-    MessageContentRegion,
 )
+from .rules.declass_removal import RemoveDeclassMarkings
+from .rules.classification_extraction import ExtractClassificationMarker
+from .rules.page_break_extraction import ExtractPageBreak
+from .rules.end_marker_removal import RemoveEndMarker
+from .rules.message_content import BuildMessageContent
 
 
 def build_rebulk():
@@ -27,13 +32,18 @@ def build_rebulk():
     rebulk.rebulk(classification())
     rebulk.rebulk(declass_markings())
     rebulk.rebulk(page_break())
+    rebulk.rebulk(dash_counter())
     rebulk.rebulk(dtg())
     rebulk.rebulk(distribution())
 
     rebulk.rules(
         ValidateSingleMessageText,
         ValidateSingleMessageAttributes,
-        MessageContentRegion,
+        RemoveDeclassMarkings,
+        ExtractClassificationMarker,
+        ExtractPageBreak,
+        RemoveEndMarker,
+        BuildMessageContent,
     )
 
     return rebulk

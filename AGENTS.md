@@ -54,18 +54,47 @@ the position of `page_break`, `classification_marker`  and `end_marker` is ident
 `end_marker` gets removed without output
 ---
 
-input text is now free of most markers
+content text (progressively cleaned via `_content` match) is now free of most markers
 ---
-now in order from top to bottom following header components extracted and removed on the cleaned input
+now in order from top to bottom following header components are extracted and removed on the cleaned input
 ---
-distribution is extracted and removed
+distribution is extracted and removed (via ParseDistribution)
 ---
-dash counter is extracted and removed
+dash counter is extracted and removed (via CollectDashCounters)
 ---
-dtg is extracted and removed
+dtg is extracted and removed (via ParseDTG)
 ---
 
 TODO next fields
+
+# Rule dependency chain (implemented)
+
+The extraction pipeline uses the following ordered rules, each handling ONE stripping/output step:
+
+```
+ValidateSingleMessageText (256)              [src/rules/validate.py]
+  └─ ValidateSingleMessageAttributes (256)   [src/rules/validate.py]
+       └─ CollectMarkings (200)              [src/patterns/declass_markings.py]
+       └─ RemoveDeclassMarkings (200)        [src/rules/declass_removal.py]
+
+TagLocatorTextOnline (152)                   [src/patterns/locator.py]
+  └─ ExtractClassificationMarker (144)       [src/rules/classification_extraction.py]
+       └─ ExtractPageBreak (128)             [src/rules/page_break_extraction.py]
+            └─ RemoveEndMarker (112)         [src/rules/end_marker_removal.py]
+                 └─ BuildMessageContent (96) [src/rules/message_content.py]
+                      └─ ParseDistribution (64) [src/patterns/distribution.py]
+
+CollectDashCounters (32)                     [src/patterns/dash_counter.py]
+ParseDTG (32)                                [src/patterns/dtg.py]
+```
+
+Each rule accumulates strip ranges (in original input coordinates) into `context["_strip_ranges"]`.
+`BuildMessageContent` merges all ranges and applies them to the original input in one pass to produce `_message_content`.
+
+# Files layout
+
+- `src/patterns/` — pattern modules that define raw regex/string matches
+- `src/rules/` — rule modules that implement extraction, stripping, and output logic
 
 
 # JSON output structure
