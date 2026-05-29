@@ -1,29 +1,19 @@
-"""Locator attribute pattern."""
+"""Tag Locator matches that contain TEXT ON-LINE."""
 
 from rebulk import Rebulk, Rule
 from rebulk.remodule import re
 
 
 def locator():
-    """Build Locator attribute pattern.
+    """Return a Rebulk that tags Locator matches containing TEXT ON-LINE.
 
-    Matches "Locator: value" where value may span multiple indented
-    continuation lines.  The "Locator:" prefix is stripped in formatter.
+    The Locator key is already matched by attributes.py via string
+    matching.  This module adds a rule that tags those matches with
+    "text-online" when the value indicates the message text is
+    available.
     """
     rebulk = Rebulk()
-
-    rebulk.regex(
-        r"(?m)^Locator:\s*.*(?:\n[ \t]+.*)*",
-        name="Locator",
-        tags=["attribute"],
-        flags=re.IGNORECASE,
-        formatter=lambda s: s[len("Locator:") :].strip()
-        if s.startswith("Locator:")
-        else s,
-    )
-
     rebulk.rules(TagLocatorTextOnline)
-
     return rebulk
 
 

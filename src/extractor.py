@@ -2,6 +2,7 @@
 
 import json
 import os
+import sys
 
 from .builder import build_rebulk
 from .coverage import CoverageTracker
@@ -26,11 +27,13 @@ def result_to_dict(matches):
         if match.private or match.marker or match.parent:
             continue
         name = match.name
-        if not name or name in ("attribute", "message_content"):
+        if not name or name == "message_content":
             continue
         value = match.value
         if value is not None and isinstance(value, str):
             value = value.strip()
+            if value.startswith(name + ":"):
+                value = value[len(name) + 1 :].strip()
         result[name] = value
     return result
 
@@ -79,27 +82,66 @@ def main():
     parser.add_argument(
         "--limit", type=int, default=None, help="Limit number of files to process"
     )
-    parser.add_argument(
-        "--output", default="-", help="Output JSON file (default: stdout)"
-    )
+    parser.add_argument("--output", default="-", help="Output file (default: stdout)")
     parser.add_argument("--single", help="Process a single file")
+    parser.add_argument(
+        "--batch",
+        action="store_true",
+        help="Use index.csv for file discovery with NDJSON output",
+    )
+    parser.add_argument(
+        "--checkpoint",
+        default=None,
+        help="Checkpoint file for batch resume",
+    )
+    parser.add_argument(
+        "--progress",
+        type=int,
+        default=10000,
+        help="Progress report interval (default: 10000)",
+    )
     args = parser.parse_args()
 
     if args.single:
         result = extract_file(args.single)
         output = json.dumps(result["result"], indent=2)
-    else:
-        data = process_documents(args.root_dir, limit=args.limit)
-        output = json.dumps(
-            {
-                "coverage": data["coverage"],
-                "count": len(data["results"]),
-                "results": data["results"][:100]
-                if len(data["results"]) > 100
-                else data["results"],
-            },
-            indent=2,
+        if args.output == "-":
+            print(output)
+        else:
+            with open(args.output, "w") as f:
+                f.write(output)
+        return
+
+    if args.batch:
+        if args.output == "-":
+            print("--batch requires --output FILE", file=sys.stderr)
+            sys.exit(1)
+        from .batch import process_batch
+
+        summary = process_batch(
+            args.root_dir,
+            output_path=args.output,
+            checkpoint_path=args.checkpoint,
+            limit=args.limit,
+            progress_interval=args.progress,
         )
+        summary_path = args.checkpoint or (args.output + ".summary.json")
+        with open(summary_path, "w") as f:
+            json.dump(summary, f, indent=2)
+        print(json.dumps(summary, indent=2))
+        return
+
+    data = process_documents(args.root_dir, limit=args.limit)
+    output = json.dumps(
+        {
+            "coverage": data["coverage"],
+            "count": len(data["results"]),
+            "results": data["results"][:100]
+            if len(data["results"]) > 100
+            else data["results"],
+        },
+        indent=2,
+    )
 
     if args.output == "-":
         print(output)
