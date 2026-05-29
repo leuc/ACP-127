@@ -56,7 +56,7 @@ the position of `page_break`, `classification_marker`  and `end_marker` is ident
 
 input text is now free of most markers
 ---
-now in order from top to bottom the header is extracted and removed on the cleaned input
+now in order from top to bottom following header components extracted and removed on the cleaned input
 ---
 distribution is extracted and removed
 ---
