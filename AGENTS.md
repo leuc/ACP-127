@@ -11,11 +11,15 @@ to tackle the large amount of messy data the app MUST:
 the data is extracted with chains of patterns that are combined in a depedency tree of rebulk Rules
 
 for each extract field we define a pattern in a dedicated file
+MOST matched fields are exported to JSON
+MOST matched fields are removed from the input until only the primary body content remains
+the order of removal matters!
 
 # input structure
 
 the details of acp-127 are described in docs/acp127g.txt
-the following describes each field in order of dependency
+
+the following describes each field and step in order of dependency
 
 ---
 the input is split into two parts with the strings
@@ -29,53 +33,40 @@ the acp-127 message content is located between "Message Text" and "Message Attri
 
 ---
 
-"Message Attributes" follows a list of atrributes in "key: value" format. 
+"Message Attributes" follows a list of atrributes in "key: value" format.
 SOME attribute values cross multiple lines
 Each attribute MUST be handled as indiviudal field for dependency checks
 See ATTRIBUTES.md for possible values and counts of each attribute
 
 ---
 r"^Locator:" attribute indicates if the content after "Message Text" contains a acp-127 message or errors
-r"TEXT ON-LINE" MUST exist for acp-127 extraction 
+r"TEXT ON-LINE" MUST exist for acp-127 body extraction
 ---
-Automatic Decaptioning
-Capture Date
-Channel Indicators
-Current Classification
-Concepts
-Control Number
-Copy
-Draft Date
-Decaption Date
-Decaption Note
-Disposition Action
-Disposition Approved on Date
-Disposition Authority
-Disposition Case Number
-Disposition Comment
-Disposition Date
-Disposition Event
-Disposition History
-Disposition Reason
-Disposition Remarks
-Document Number
-Document Source
-Document Unique ID
-Drafter
-Enclosure
-Executive Order
-Errors
-Film Number
-From
-Handling Restrictions
-Image Path
-ISecure
-Legacy Key
-Line Count
-Locator
-Office
-Original Classification
-Original Handling Restrictions
+all `declass_markings` and `content_footer_marker`  are removed without output in JSON
+---
+the position of `page_break`, `classification_marker`  and `end_marker` is identified.
+`classification_marker` MUST be directly NEXT to `page_break` or `end_marker` or it does not MATCH
+---
+`classification_marker` gets output in JSON and removed from input
+---
+`page_break` gets output into JSON and removed from input. every empty line before and after gets removed (to merge continues text)
+---
+`end_marker` gets removed without output
+---
+
+input text is now free of most markers
+---
+now in order from top to bottom the header is extracted and removed on the cleaned input
+---
+distribution is extracted and removed
+---
+dash counter is extracted and removed
+---
+dtg is extracted and removed
+---
+
+TODO next fields
+
 
 # JSON output structure
 
