@@ -16,6 +16,7 @@ from .patterns.to_line import to_line
 from .patterns.info_line import info_line
 from .patterns.drafting import drafting
 from .patterns.eo_line import eo_line
+from .patterns.tags_line import tags_line
 from .rules.validate import (
     ValidateSingleMessageText,
     ValidateSingleMessageAttributes,
@@ -45,6 +46,7 @@ def build_rebulk():
     rebulk.rebulk(info_line())
     rebulk.rebulk(drafting())
     rebulk.rebulk(eo_line())
+    rebulk.rebulk(tags_line())
 
     rebulk.rules(
         ValidateSingleMessageText,
