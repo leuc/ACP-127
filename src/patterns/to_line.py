@@ -1,8 +1,9 @@
 """Extract the TO (addressee) lines from message content.
 
 The TO field lists primary addressees and may span multiple lines.
-It appears after the FM line in the routing header, before INFO.
-The routing header is bounded by the first blank line after FM.
+It appears after the FM line in the routing header. The routing header
+is bounded by the first blank line after FM. INFO lines act as a
+section boundary within the header.
 
 Output field:
   _to — the addressee text, "TO " prefix stripped, lines joined with spaces
@@ -13,6 +14,7 @@ from rebulk.match import Match
 from rebulk.remodule import re
 
 from ..rules.message_content import BuildMessageContent
+from .routing import find_routing_header
 
 
 def to_line():
@@ -27,22 +29,11 @@ class ParseTo(Rule):
 
     The routing header runs from FM to the first blank line.
     TO lines and their continuations are extracted from within that region.
+    INFO lines mark section boundaries — they are skipped for TO output.
     """
 
     priority = 32
     dependency = BuildMessageContent
-
-    @staticmethod
-    def _find_routing_header(mc_text):
-        """Return (header_start, header_end, header_text) or None."""
-        fm_m = re.search(r"^FM\s+", mc_text, re.MULTILINE)
-        if not fm_m:
-            return None
-        header_start = fm_m.start()
-        rest = mc_text[header_start:]
-        blank_m = re.search(r"\n\s*\n", rest)
-        header_end = blank_m.start() if blank_m else len(rest)
-        return header_start, header_end, rest[:header_end]
 
     @staticmethod
     def _collect_to_lines(header_text):
@@ -95,7 +86,7 @@ class ParseTo(Rule):
         mc_text = mc[0].value
         mc_start = mc[0].start
 
-        header = self._find_routing_header(mc_text)
+        header = find_routing_header(mc_text)
         if header is None:
             return False
         header_start, header_end, header_text = header

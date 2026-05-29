@@ -13,6 +13,7 @@ from .patterns.dtg import dtg
 from .patterns.distribution import distribution
 from .patterns.from_line import from_line
 from .patterns.to_line import to_line
+from .patterns.info_line import info_line
 from .rules.validate import (
     ValidateSingleMessageText,
     ValidateSingleMessageAttributes,
@@ -39,6 +40,7 @@ def build_rebulk():
     rebulk.rebulk(distribution())
     rebulk.rebulk(from_line())
     rebulk.rebulk(to_line())
+    rebulk.rebulk(info_line())
 
     rebulk.rules(
         ValidateSingleMessageText,
