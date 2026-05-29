@@ -47,10 +47,10 @@ def _parse_distribution(text):
             for code, count in _CODE_RE.findall(stripped):
                 result["ACTION"][code] = int(count)
         elif upper.startswith("ORIGIN"):
-            current_section = "ACTION"
-            result["ACTION"] = {}
+            current_section = "ORIGIN"
+            result["ORIGIN"] = {}
             for code, count in _CODE_RE.findall(stripped):
-                result["ACTION"][code] = int(count)
+                result["ORIGIN"][code] = int(count)
         elif upper.startswith("INFO"):
             current_section = "INFO"
             result["INFO"] = {}
@@ -100,15 +100,30 @@ class ParseDistribution(Rule):
         if not dash_m:
             return False
 
-        dist_text = mc_text[: dash_m.start()]
+        text_before_dash = mc_text[: dash_m.start()]
+
+        # Find first ACTION or ORIGIN line — distribution starts there
+        act = re.search(r"^ACTION\b", text_before_dash, re.MULTILINE)
+        org = re.search(r"^ORIGIN\b", text_before_dash, re.MULTILINE)
+        dist_start = None
+        if act and org:
+            dist_start = min(act.start(), org.start())
+        elif act:
+            dist_start = act.start()
+        elif org:
+            dist_start = org.start()
+        else:
+            return False
+
+        dist_text = text_before_dash[dist_start:]
 
         parsed = _parse_distribution(dist_text)
         if not parsed:
             return False
 
         dist_match = Match(
-            mc_start,
-            mc_start + len(dist_text),
+            mc_start + dist_start,
+            mc_start + dash_m.start(),
             value={"raw": dist_text, **parsed},
             name="distribution",
             tags=["message_content"],
