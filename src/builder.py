@@ -8,6 +8,7 @@ from .patterns.attributes import attributes
 from .patterns.classification import classification
 from .patterns.page_break import page_break
 from .patterns.dtg import dtg
+from .patterns.distribution import distribution
 from .rules.split import (
     ValidateSingleMessageText,
     ValidateSingleMessageAttributes,
@@ -25,6 +26,7 @@ def build_rebulk():
     rebulk.rebulk(classification())
     rebulk.rebulk(page_break())
     rebulk.rebulk(dtg())
+    rebulk.rebulk(distribution())
 
     rebulk.rules(
         ValidateSingleMessageText,

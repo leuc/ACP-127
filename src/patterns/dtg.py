@@ -33,7 +33,7 @@ _MONTHS = {
 _MONTH_PAT = "|".join(_MONTHS)
 
 _DTG_RE = re.compile(
-    rf"^((?:[ZOPR] [ZOPR] |[ZOPR] )(\d{{2}})(\d{{2}})(\d{{2}})Z ({_MONTH_PAT}) (\d{{2}}))\s*$",
+    rf"^(?P<full>(?:[ZOPR] [ZOPR] |[ZOPR] )(?P<dd>\d{{2}})(?P<hh>\d{{2}})(?P<mm>\d{{2}})Z (?P<mon>{_MONTH_PAT}) (?P<yy>\d{{2}}))\s*$",
     re.MULTILINE,
 )
 
@@ -59,12 +59,12 @@ def _parse_dtg_line(line):
     m = _DTG_RE.match(line)
     if not m:
         return None
-    full, dd, hh, mm, mon, yy = m.groups()
-    yyyy = _parse_year(yy)
-    dt = datetime(yyyy, _MONTHS[mon], int(dd), int(hh), int(mm))
-    prec_raw = full[: full.index(dd)].strip()
+    g = m.groupdict()
+    yyyy = _parse_year(g["yy"])
+    dt = datetime(yyyy, _MONTHS[g["mon"]], int(g["dd"]), int(g["hh"]), int(g["mm"]))
+    prec_raw = g["full"][: g["full"].index(g["dd"])].strip()
     return {
-        "raw": full,
+        "raw": g["full"],
         "precedence": [_PRECEDENCE_MAP.get(c, c) for c in prec_raw.split()],  # type: ignore[arg-type]
         "date_iso": dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
