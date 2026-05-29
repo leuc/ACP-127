@@ -9,4 +9,3 @@ from .extractor import (
     process_documents,
     result_to_dict,
 )
-from .indexer import find_indexes, iter_indexed_files, read_index
