@@ -106,6 +106,12 @@ def main():
         default=10000,
         help="Progress report interval (default: 10000)",
     )
+    parser.add_argument(
+        "--sample",
+        type=int,
+        default=None,
+        help="Randomly sample N files (overrides --limit)",
+    )
     args = parser.parse_args()
 
     if args.single:
@@ -118,9 +124,9 @@ def main():
                 f.write(output)
         return
 
-    if args.batch:
+    if args.batch or args.sample:
         if args.output == "-":
-            print("--batch requires --output FILE", file=sys.stderr)
+            print("--batch/--sample requires --output FILE", file=sys.stderr)
             sys.exit(1)
         from .batch import process_batch
 
@@ -130,6 +136,7 @@ def main():
             checkpoint_path=args.checkpoint,
             limit=args.limit,
             progress_interval=args.progress,
+            sample=args.sample,
         )
         summary_path = args.checkpoint or (args.output + ".summary.json")
         with open(summary_path, "w") as f:

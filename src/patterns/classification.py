@@ -98,7 +98,7 @@ class CollectClassificationMarkers(Rule):
                 valid.append(m)
 
         if not valid:
-            return False
+            return list(markers), []
 
         unique_values = list(dict.fromkeys(m.raw.strip().upper() for m in valid))
 

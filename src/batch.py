@@ -2,6 +2,7 @@
 
 import json
 import os
+import random
 import sys
 
 from .builder import build_rebulk
@@ -59,19 +60,32 @@ def process_batch(
     checkpoint_path=None,
     limit=None,
     progress_interval=10000,
+    sample=None,
 ):
     """Process .txt files under root_dir, writing NDJSON to output_path.
 
-    Walks root_dir to discover all .txt files in sorted order.
-    Supports checkpoint/resume — skips already-processed files
-    when checkpoint_path points to a prior checkpoint file.
+    Walks root_dir to discover all .txt files. Supports:
+    - Sequential processing in sorted order (default)
+    - Random sampling via sample=N for unbiased subsets
+    - Checkpoint/resume for sequential mode
     """
-    start_index, tracker = _load_checkpoint(checkpoint_path)
-    rebulk = build_rebulk()
-
     sys.stderr.write(f"Discovering .txt files under {root_dir}...\n")
     all_files = _discover_files(root_dir)
     sys.stderr.write(f"Found {len(all_files)} .txt files\n")
+
+    if sample:
+        random.seed(0)
+        selected = random.sample(all_files, min(sample, len(all_files)))
+        sys.stderr.write(f"Randomly selected {len(selected)} files for sampling\n")
+        return _process_file_list(
+            selected,
+            output_path,
+            progress_interval=progress_interval,
+            total_available=len(all_files),
+        )
+
+    start_index, tracker = _load_checkpoint(checkpoint_path)
+    rebulk = build_rebulk()
 
     resume = start_index >= 0
     if resume:
@@ -128,6 +142,60 @@ def process_batch(
     summary = tracker.summary()
     summary["files_found"] = len(all_files)
     summary["files_processed"] = count
+    return summary
+
+
+def _process_file_list(
+    file_list,
+    output_path,
+    progress_interval=10000,
+    total_available=None,
+):
+    """Process a specific list of files with NDJSON output.
+
+    Used internally by random sampling mode.
+    """
+    rebulk = build_rebulk()
+    tracker = CoverageTracker()
+    out_file = open(output_path, "w")
+    count = 0
+    total = len(file_list)
+
+    for filepath in file_list:
+        try:
+            with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+                text = f.read()
+        except Exception as e:
+            sys.stderr.write(f"ERROR reading {filepath}: {e}\n")
+            continue
+
+        try:
+            matches = rebulk.matches(text)
+        except Exception as e:
+            sys.stderr.write(f"ERROR matching {filepath}: {e}\n")
+            continue
+
+        tracker.record(text, matches)
+        result = _result_to_dict(matches)
+        result["_file"] = filepath
+        out_file.write(json.dumps(result, default=str) + "\n")
+
+        count += 1
+        if count % progress_interval == 0:
+            summary = tracker.summary()
+            pct = (count / total * 100) if total > 0 else 0
+            sys.stderr.write(
+                f"[{count}/{total} ({pct:.0f}%)] "
+                f"doc_cov={summary['document_coverage_pct']}% "
+                f"byte_cov={summary['byte_coverage_pct']}%\n"
+            )
+
+    out_file.close()
+
+    summary = tracker.summary()
+    summary["files_found"] = total_available or total
+    summary["files_processed"] = count
+    summary["files_sampled"] = total
     return summary
 
 
