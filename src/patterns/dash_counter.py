@@ -9,8 +9,6 @@ from rebulk import Rebulk, Rule
 from rebulk.match import Match
 from rebulk.remodule import re
 
-from ..rules.message_content import StripContentText
-
 
 def dash_counter():
     """Build pattern that matches the dash counter line."""
@@ -36,7 +34,6 @@ class CollectDashCounters(Rule):
     """
 
     priority = 32
-    consequence = StripContentText()
 
     def when(self, matches, context):
         markers = list(matches.named("dash_counter"))
@@ -54,4 +51,11 @@ class CollectDashCounters(Rule):
             name="dash_counters",
             tags=["dash_counter"],
         )
-        return markers, [first.raw], [dc_match]
+        return markers, dc_match
+
+    def then(self, matches, when_response, context):
+        markers, dc_match = when_response
+        for m in markers:
+            if m in matches:
+                matches.remove(m)
+        matches.append(dc_match)

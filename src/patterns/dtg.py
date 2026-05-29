@@ -16,8 +16,6 @@ from datetime import datetime
 from rebulk import Rebulk, Rule
 from rebulk.remodule import re
 
-from ..rules.message_content import StripContentText
-
 _MONTHS = {
     "JAN": 1,
     "FEB": 2,
@@ -96,23 +94,20 @@ class ParseDTG(Rule):
 
     Removes invalid DTG matches. Valid matches are left in place with
     their value already populated by the regex pattern's formatter.
-    Valid DTG lines are stripped from message_content.
     """
 
     priority = 32
-    consequence = StripContentText()
 
     def when(self, matches, context):
         text_ms = matches.markers.named("message_text_marker")
         attr_ms = matches.markers.named("message_attributes_marker")
         if len(text_ms) != 1 or len(attr_ms) != 1:
-            return list(matches.named("dtg")), [], []
+            return list(matches.named("dtg"))
 
         region_start = text_ms[0].end
         region_end = attr_ms[0].start
 
         to_remove = []
-        texts_to_strip = []
         for m in matches.named("dtg"):
             if not (region_start <= m.start < region_end):
                 to_remove.append(m)
@@ -125,6 +120,10 @@ class ParseDTG(Rule):
             if year < 1973 or year > 1979:
                 to_remove.append(m)
                 continue
-            texts_to_strip.append(m.raw.strip())
 
-        return to_remove, texts_to_strip, []
+        return to_remove
+
+    def then(self, matches, when_response, context):
+        for m in when_response:
+            if m in matches:
+                matches.remove(m)

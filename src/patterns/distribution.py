@@ -11,11 +11,10 @@ from rebulk import Rebulk, Rule
 from rebulk.match import Match
 from rebulk.remodule import re
 
-from ..rules.message_content import BuildMessageContent, StripContentText
+from ..rules.message_content import BuildMessageContent
 
-_DASH_RE = re.compile(r"^\s{4,}\-{10,}\s*\d+", re.MULTILINE)
 _CODE_RE = re.compile(r"(?P<code>\w+)-(?P<count>\d+)")
-_SUM_RE = re.compile(r"/\s*(?P<expected>\d+)(?:\s+\w)?\s*$", re.MULTILINE)
+_SUM_RE = re.compile(r"/\s*(?P<expected>\d+)(?:\s+[RW])?\s*$", re.MULTILINE)
 
 
 def _validate_sum(parsed, text):
@@ -80,13 +79,11 @@ def distribution():
 class ParseDistribution(Rule):
     """Parse distribution (ACTION/INFO addressee codes) from message content.
 
-    Runs after MessageContentRegion (page breaks stripped).
-    Finds the dash counter and parses everything before it.
+    Uses the /N sum line (e.g. "/050 W") to find where distribution ends.
     """
 
     priority = 64
     dependency = BuildMessageContent
-    consequence = StripContentText()
 
     def when(self, matches, context):
         mc = matches.named("message_content")
@@ -96,15 +93,9 @@ class ParseDistribution(Rule):
         mc_text = mc[0].value
         mc_start = mc[0].start
 
-        dash_m = _DASH_RE.search(mc_text)
-        if not dash_m:
-            return False
-
-        text_before_dash = mc_text[: dash_m.start()]
-
         # Find first ACTION or ORIGIN line — distribution starts there
-        act = re.search(r"^ACTION\b", text_before_dash, re.MULTILINE)
-        org = re.search(r"^ORIGIN\b", text_before_dash, re.MULTILINE)
+        act = re.search(r"^ACTION\b", mc_text, re.MULTILINE)
+        org = re.search(r"^ORIGIN\b", mc_text, re.MULTILINE)
         dist_start = None
         if act and org:
             dist_start = min(act.start(), org.start())
@@ -115,7 +106,15 @@ class ParseDistribution(Rule):
         else:
             return False
 
-        dist_text = text_before_dash[dist_start:]
+        # Find /N sum line to determine distribution end
+        sum_m = _SUM_RE.search(mc_text, dist_start)
+        if not sum_m:
+            return False
+
+        sum_end = mc_text.find("\n", sum_m.end())
+        dist_end = sum_end + 1 if sum_end >= 0 else len(mc_text)
+
+        dist_text = mc_text[dist_start:dist_end]
 
         parsed = _parse_distribution(dist_text)
         if not parsed:
@@ -123,9 +122,12 @@ class ParseDistribution(Rule):
 
         dist_match = Match(
             mc_start + dist_start,
-            mc_start + dash_m.start(),
+            mc_start + dist_end,
             value={"raw": dist_text, **parsed},
             name="distribution",
             tags=["message_content"],
         )
-        return [], [dist_text], [dist_match]
+        return dist_match
+
+    def then(self, matches, when_response, context):
+        matches.append(when_response)
