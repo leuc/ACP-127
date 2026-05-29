@@ -2,7 +2,8 @@
 
 from rebulk import Rule, AppendMatch, RemoveMatch
 from rebulk.match import Match
-from rebulk.remodule import re
+
+from ..patterns.locator import TagLocatorTextOnline
 
 
 class ValidateSingleMessageText(Rule):
@@ -34,15 +35,15 @@ class ValidateSingleMessageAttributes(Rule):
 
 class MessageContentRegion(Rule):
     """Define message_content as the region between Message Text
-    and Message Attributes markers.  Requires Locator to contain
-    TEXT ON-LINE — without it the message text is not available.
+    and Message Attributes markers.  Requires Locator tagged with
+    text-online — without it the message text is not available.
 
     Marking lines (declassification boilerplate) are stripped
     via CollectMarkings rule + marking_line match removal.
     """
 
     priority = 144
-    dependency = ValidateSingleMessageAttributes
+    dependency = TagLocatorTextOnline
     consequence = AppendMatch
 
     def when(self, matches, context):
@@ -51,10 +52,7 @@ class MessageContentRegion(Rule):
         if len(text_ms) != 1 or len(attr_ms) != 1:
             return False
 
-        locator_ms = matches.named("Locator")
-        if not locator_ms:
-            return False
-        if not re.search(r"\bTEXT\s+ON-LINE\b", locator_ms[0].value, re.IGNORECASE):
+        if not any("text-online" in m.tags for m in matches.named("Locator")):
             return False
 
         text_end = text_ms[0].end

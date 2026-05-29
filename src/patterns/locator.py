@@ -1,7 +1,6 @@
 """Tag Locator matches that contain TEXT ON-LINE."""
 
 from rebulk import Rebulk, Rule
-from rebulk.remodule import re
 
 
 def locator():
@@ -20,10 +19,10 @@ def locator():
 class TagLocatorTextOnline(Rule):
     """Tag locator matches that contain TEXT ON-LINE."""
 
-    priority = 64
+    priority = 152
 
     def when(self, matches, context):
         for match in matches.named("Locator"):
-            if re.search(r"\bTEXT\s+ON-LINE\b", match.value, re.IGNORECASE):
+            if "TEXT ON-LINE" in match.value.upper():
                 match.tags.append("text-online")
         return False
