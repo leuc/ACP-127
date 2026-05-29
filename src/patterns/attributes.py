@@ -2,6 +2,7 @@
 
 from rebulk import Rebulk, Rule, RemoveMatch, AppendMatch
 from rebulk.match import Match
+from rebulk.validators import chars_before
 
 _KEYS = [
     "Automatic Decaptioning",
@@ -107,7 +108,7 @@ def attributes():
 
         def make_validator(k):
             return lambda m: (
-                (m.start == 0 or m.input_string[m.start - 1] == "\n")
+                chars_before("\n", m)
                 and m.end < len(m.input_string)
                 and m.input_string[m.end] == ":"
                 and m.value == k

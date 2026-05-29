@@ -18,6 +18,19 @@ _CODE_RE = re.compile(r"(?P<code>\w+)-(?P<count>\d+)")
 _SUM_RE = re.compile(r"/\s*(?P<expected>\d+)(?:\s+\w)?\s*$", re.MULTILINE)
 
 
+def _validate_sum(parsed, text):
+    """Validate that the expected sum (from /N suffix) matches actual total.
+
+    Returns a dict with expected, actual, valid keys, or None if no sum marker found.
+    """
+    total = sum(c for section in parsed.values() for c in section.values())
+    sum_m = _SUM_RE.search(text)
+    if not sum_m:
+        return None
+    expected = int(sum_m.group("expected"))
+    return {"expected": expected, "actual": total, "valid": expected == total}
+
+
 def _parse_distribution(text):
     lines = text.split("\n")
     result = {}
@@ -50,14 +63,9 @@ def _parse_distribution(text):
     if not result:
         return None
 
-    total = sum(c for section in result.values() for c in section.values())
-    sum_m = _SUM_RE.search(text)
-    if sum_m:
-        result["_sum_check"] = {
-            "expected": int(sum_m.group("expected")),
-            "actual": total,
-            "valid": int(sum_m.group("expected")) == total,
-        }
+    sum_check = _validate_sum(result, text)
+    if sum_check:
+        result["_sum_check"] = sum_check
 
     return result
 

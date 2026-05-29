@@ -5,9 +5,12 @@ Page break lines are extracted as _page_breaks and stripped from _message_conten
 End-of-message markers are used internally for classification proximity validation.
 """
 
+from functools import partial
+
 from rebulk import Rebulk, Rule, RemoveMatch, AppendMatch
 from rebulk.match import Match
 from rebulk.remodule import re
+from rebulk.validators import chars_before
 
 from ..rules.split import MessageContentRegion
 
@@ -30,7 +33,7 @@ def page_break():
             marker,
             name="end_marker",
             tags=["end_marker"],
-            validator=lambda m: m.start == 0 or m.input_string[m.start - 1] == "\n",
+            validator=partial(chars_before, "\n"),
         )
 
     rebulk.regex(
