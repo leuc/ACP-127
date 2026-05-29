@@ -6,6 +6,7 @@ from .patterns.markers import markers
 from .patterns.locator import locator
 from .patterns.attributes import attributes
 from .patterns.classification import classification
+from .patterns.markings import markings
 from .patterns.page_break import page_break
 from .patterns.dtg import dtg
 from .patterns.distribution import distribution
@@ -24,6 +25,7 @@ def build_rebulk():
     rebulk.rebulk(locator())
     rebulk.rebulk(attributes())
     rebulk.rebulk(classification())
+    rebulk.rebulk(markings())
     rebulk.rebulk(page_break())
     rebulk.rebulk(dtg())
     rebulk.rebulk(distribution())

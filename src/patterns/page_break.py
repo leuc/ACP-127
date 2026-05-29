@@ -102,7 +102,7 @@ class CollectEndMarkers(Rule):
     """
 
     priority = 32
-    dependence = MessageContentRegion
+    dependency = MessageContentRegion
     consequence = [RemoveMatch, AppendMatch]
 
     def when(self, matches, context):

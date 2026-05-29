@@ -5,24 +5,6 @@ from rebulk.match import Match
 from rebulk.remodule import re
 
 
-_MARKING_PATTERNS = [
-    r"Sheryl P\. Walter Declassified/Released US Department of State EO Systematic Review 20 Mar 2014",
-    r"Declassified/Released US Department of State EO Systematic Review 30 JUN 2005",
-    r"Margaret P\. Grafeld Declassified/Released US Department of State EO Systematic Review 04 MAY 2006",
-    r"Margaret P\. Grafeld Declassified/Released US Department of State EO Systematic Review 22 May 2009",
-    r"Margaret P\. Grafeld Declassified/Released US Department of State EO Systematic Review 06 JUL 2006",
-    r"Margaret P\. Grafeld Declassified/Released US Department of State EO Systematic Review 05 JUL 2006",
-]
-
-_MARKING_RE = re.compile(
-    r"^[ \t\f]*(?:" + "|".join(_MARKING_PATTERNS) + r")[ \t]*\n?", re.MULTILINE
-)
-
-
-def _strip_markings(text):
-    return _MARKING_RE.sub("", text)
-
-
 class ValidateSingleMessageText(Rule):
     """Ensure exactly one Message Text marker exists."""
 
@@ -55,8 +37,8 @@ class MessageContentRegion(Rule):
     and Message Attributes markers.  Requires Locator to contain
     TEXT ON-LINE — without it the message text is not available.
 
-    Known marking lines (declassification boilerplate) are stripped
-    from the extracted content value.
+    Marking lines (declassification boilerplate) are stripped
+    via CollectMarkings rule + marking_line match removal.
     """
 
     priority = 144
@@ -103,6 +85,15 @@ class MessageContentRegion(Rule):
         for m in matches.named("end_marker"):
             if text_end <= m.start < attr_start:
                 ranges.append((m.start - text_end, m.end - text_end))
+        for m in matches.named("marking_line"):
+            if text_end <= m.start < attr_start:
+                start = m.start - text_end
+                end = m.end - text_end
+                while start > 0 and raw[start - 1] in "\n\r":
+                    start -= 1
+                while end < len(raw) and raw[end] in "\n\r":
+                    end += 1
+                ranges.append((start, end))
         if ranges:
             ranges.sort()
             merged = [list(ranges[0])]
@@ -117,7 +108,7 @@ class MessageContentRegion(Rule):
         m = Match(
             text_end,
             attr_start,
-            value=_strip_markings(raw),
+            value=raw,
             name="message_content",
             tags=["region"],
         )
