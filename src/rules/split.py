@@ -88,10 +88,12 @@ class MessageContentRegion(Rule):
         for m in matches.named("marking_line"):
             if text_end <= m.start < attr_start:
                 start = m.start - text_end
-                end = m.end - text_end
-                while start > 0 and raw[start - 1] in "\n\r":
+                while start > 0 and raw[start - 1] not in "\n\r":
                     start -= 1
-                while end < len(raw) and raw[end] in "\n\r":
+                end = m.end - text_end
+                while end < len(raw) and raw[end] not in "\n\r":
+                    end += 1
+                if end < len(raw):
                     end += 1
                 ranges.append((start, end))
         if ranges:
