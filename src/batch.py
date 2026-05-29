@@ -1,6 +1,9 @@
 """Batch processor with checkpoint/resume and NDJSON output."""
 
-import json
+try:
+    import orjson as json
+except ImportError:
+    import json
 import os
 import random
 import sys
@@ -118,7 +121,7 @@ def process_batch(
         tracker.record(text, matches)
         result = result_to_dict(matches)
         result["_file"] = filepath
-        out_file.write(json.dumps(result, default=str) + "\n")
+        out_file.write(json.dumps(result).decode("utf-8") + "\n")
 
         count += 1
         if count % progress_interval == 0:
@@ -179,7 +182,7 @@ def _process_file_list(
         tracker.record(text, matches)
         result = result_to_dict(matches)
         result["_file"] = filepath
-        out_file.write(json.dumps(result, default=str) + "\n")
+        out_file.write(json.dumps(result).decode("utf-8")+ "\n")
 
         count += 1
         if count % progress_interval == 0:

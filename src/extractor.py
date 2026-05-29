@@ -1,6 +1,10 @@
 """Main extraction engine — iterates over txt files and runs the rebulk pipeline."""
 
-import json
+try:
+    import orjson as json
+except ImportError:
+    import json
+
 import os
 import sys
 
@@ -106,9 +110,8 @@ def main():
             {
                 "coverage": result["coverage"],
                 "results": [result["result"]],
-            },
-            indent=2,
-        )
+            }
+        ).decode("utf-8")
         if args.output == "-":
             print(output)
         else:
@@ -141,9 +144,8 @@ def main():
                     "field_match_rates": summary.get("field_match_rates", {}),
                 },
                 "results": [],
-            },
-            indent=2,
-        )
+            }
+        ).decode("utf-8")
         with open(summary_path, "w") as f:
             f.write(output)
         print(output)
@@ -156,9 +158,8 @@ def main():
             "results": data["results"][:100]
             if len(data["results"]) > 100
             else data["results"],
-        },
-        indent=2,
-    )
+        }
+    ).decode("utf-8")
 
     if args.output == "-":
         print(output)
