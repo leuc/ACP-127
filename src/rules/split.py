@@ -5,6 +5,24 @@ from rebulk.match import Match
 from rebulk.remodule import re
 
 
+_MARKING_PATTERNS = [
+    r"Sheryl P\. Walter Declassified/Released US Department of State EO Systematic Review 20 Mar 2014",
+    r"Declassified/Released US Department of State EO Systematic Review 30 JUN 2005",
+    r"Margaret P\. Grafeld Declassified/Released US Department of State EO Systematic Review 04 MAY 2006",
+    r"Margaret P\. Grafeld Declassified/Released US Department of State EO Systematic Review 22 May 2009",
+    r"Margaret P\. Grafeld Declassified/Released US Department of State EO Systematic Review 06 JUL 2006",
+    r"Margaret P\. Grafeld Declassified/Released US Department of State EO Systematic Review 05 JUL 2006",
+]
+
+_MARKING_RE = re.compile(
+    r"^[ \t\f]*(?:" + "|".join(_MARKING_PATTERNS) + r")[ \t]*\n?", re.MULTILINE
+)
+
+
+def _strip_markings(text):
+    return _MARKING_RE.sub("", text)
+
+
 class ValidateSingleMessageText(Rule):
     """Ensure exactly one Message Text marker exists."""
 
@@ -36,6 +54,9 @@ class MessageContentRegion(Rule):
     """Define message_content as the region between Message Text
     and Message Attributes markers.  Requires Locator to contain
     TEXT ON-LINE — without it the message text is not available.
+
+    Known marking lines (declassification boilerplate) are stripped
+    from the extracted content value.
     """
 
     priority = 144
@@ -63,7 +84,7 @@ class MessageContentRegion(Rule):
         m = Match(
             text_end,
             attr_start,
-            value=matches.input_string[text_end:attr_start],
+            value=_strip_markings(matches.input_string[text_end:attr_start]),
             name="message_content",
             tags=["region"],
         )

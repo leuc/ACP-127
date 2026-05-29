@@ -5,6 +5,7 @@ from rebulk import Rebulk
 from .patterns.markers import markers
 from .patterns.locator import locator
 from .patterns.attributes import attributes
+from .patterns.classification import classification
 from .rules.split import (
     ValidateSingleMessageText,
     ValidateSingleMessageAttributes,
@@ -19,6 +20,7 @@ def build_rebulk():
     rebulk.rebulk(markers())
     rebulk.rebulk(locator())
     rebulk.rebulk(attributes())
+    rebulk.rebulk(classification())
 
     rebulk.rules(
         ValidateSingleMessageText,
