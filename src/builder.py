@@ -12,6 +12,7 @@ from .patterns.dash_counter import dash_counter
 from .patterns.dtg import dtg
 from .patterns.distribution import distribution
 from .patterns.from_line import from_line
+from .patterns.to_line import to_line
 from .rules.validate import (
     ValidateSingleMessageText,
     ValidateSingleMessageAttributes,
@@ -37,6 +38,7 @@ def build_rebulk():
     rebulk.rebulk(dtg())
     rebulk.rebulk(distribution())
     rebulk.rebulk(from_line())
+    rebulk.rebulk(to_line())
 
     rebulk.rules(
         ValidateSingleMessageText,
