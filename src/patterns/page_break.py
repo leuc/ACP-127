@@ -9,7 +9,7 @@ from rebulk import Rebulk, Rule, RemoveMatch, AppendMatch
 from rebulk.match import Match
 from rebulk.remodule import re
 
-_KNOWN_END_MARKERS = {"NNNNMAFVVZCZ", "NNNN"}
+_KNOWN_END_MARKERS = {"NNN", "NNNN", "NNNNMAFVVZCZ"}
 
 
 def page_break():
@@ -38,9 +38,17 @@ def page_break():
         flags=re.MULTILINE,
     )
 
+    rebulk.regex(
+        r"^\s{4,}\-{10,}\s*\d+",
+        name="dash_counter",
+        tags=["dash_counter"],
+        flags=re.MULTILINE,
+    )
+
     rebulk.rules(
         CollectPageBreaks,
         CollectEndMarkers,
+        CollectDashCounters,
     )
 
     return rebulk
@@ -100,6 +108,38 @@ class CollectEndMarkers(Rule):
                 name="end_markers",
                 tags=["end_marker"],
                 private=True,
+            )
+        ]
+        return to_remove, to_append
+
+
+class CollectDashCounters(Rule):
+    """Reduce dash counter markers to a single scalar value.
+
+    Only the first marker is kept — there should be exactly one
+    per document.
+    """
+
+    priority = 32
+    consequence = [RemoveMatch, AppendMatch]
+
+    def when(self, matches, context):
+        markers = list(matches.named("dash_counter"))
+        if not markers:
+            return False
+
+        first = markers[0]
+        parts = first.raw.strip().split()
+        num = int(parts[-1]) if parts and parts[-1].isdigit() else 0
+
+        to_remove = list(markers)
+        to_append = [
+            Match(
+                first.start,
+                first.end,
+                value=num,
+                name="dash_counters",
+                tags=["dash_counter"],
             )
         ]
         return to_remove, to_append
