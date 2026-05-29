@@ -22,7 +22,8 @@ def extract_file(filepath):
 
 
 def result_to_dict(matches):
-    result = {}
+    attributes = {}
+    others = {}
     for match in matches:
         if match.private or match.marker or match.parent:
             continue
@@ -34,7 +35,12 @@ def result_to_dict(matches):
             value = value.strip()
             if value.startswith(name + ":"):
                 value = value[len(name) + 1 :].strip()
-        result[name] = value
+        if match.tags and "attribute" in match.tags:
+            attributes[name] = value
+        else:
+            others["_" + name] = value
+    result = {"Message Attributes": attributes}
+    result.update(others)
     return result
 
 

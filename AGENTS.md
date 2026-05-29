@@ -76,3 +76,28 @@ Locator
 Office
 Original Classification
 Original Handling Restrictions
+
+# JSON output structure
+
+Every extracted document produces a flat JSON object with two kinds of fields:
+
+**"Message Attributes"** (dict) — all ACP-127 key:value fields from the Message Attributes section, nested under this single key. These are the 63 known attribute keys (see `_KEYS` in `attributes.py`). They never have a `_` prefix.
+
+**Underscore-prefixed fields** — any match that is NOT a message attribute (e.g. `_message_content`, `_file`). These are computed or metadata fields, not directly from the attribute section. The `_` prefix distinguishes them from the raw input data.
+
+Example output:
+```json
+{
+  "_file": "txtv2/1973/04/1973LIMA02545.txt",
+  "_message_content": "...",
+  "Message Attributes": {
+    "Automatic Decaptioning": "X",
+    "Capture Date": "01 JAN 1994",
+    "Document Number": "1973LIMA02545",
+    "Locator": "TEXT ON-LINE",
+    ...
+  }
+}
+```
+
+Classification is done via match tags: a match with `"attribute"` in `match.tags` is placed under `"Message Attributes"`; everything else gets a `_` prefix.

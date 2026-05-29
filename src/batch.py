@@ -101,10 +101,8 @@ def process_batch(
             continue
 
         tracker.record(text, matches)
-        result = {
-            "_file": filepath,
-            "fields": _result_to_dict(matches),
-        }
+        result = _result_to_dict(matches)
+        result["_file"] = filepath
         out_file.write(json.dumps(result, default=str) + "\n")
 
         count += 1
@@ -134,7 +132,8 @@ def process_batch(
 
 
 def _result_to_dict(matches):
-    result = {}
+    attributes = {}
+    others = {}
     for match in matches:
         if match.private or match.marker or match.parent:
             continue
@@ -146,5 +145,10 @@ def _result_to_dict(matches):
             value = value.strip()
             if value.startswith(name + ":"):
                 value = value[len(name) + 1 :].strip()
-        result[name] = value
+        if match.tags and "attribute" in match.tags:
+            attributes[name] = value
+        else:
+            others["_" + name] = value
+    result = {"Message Attributes": attributes}
+    result.update(others)
     return result
