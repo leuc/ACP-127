@@ -102,6 +102,10 @@ Example output:
 
 Classification is done via match tags: a match with `"attribute"` in `match.tags` is placed under `"Message Attributes"`; everything else gets a `_` prefix.
 
+# Critical restrictions
+
+NEVER execute git commands. Do not touch git at all. You may read git output that already exists, but do not run git status, git add, git commit, git diff, git log, or any other git command. The user handles all version control manually.
+
 # Code conventions
 
 All regex capturing groups MUST use named group syntax (`(?P<name>...)`). Unnamed groups `(...)` are prohibited. This applies to both `re.compile()` and `rebulk.regex()` calls across the entire codebase. Named groups improve readability when accessing match values via `groupdict()` and make refactoring safer.

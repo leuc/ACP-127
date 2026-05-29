@@ -11,8 +11,7 @@ Output fields:
 
 from datetime import datetime
 
-from rebulk import Rebulk, Rule, RemoveMatch, AppendMatch
-from rebulk.match import Match
+from rebulk import Rebulk, Rule, RemoveMatch
 from rebulk.remodule import re
 
 _MONTHS = {
@@ -78,6 +77,9 @@ def dtg():
         _DTG_RE,
         name="dtg",
         tags=["message_content"],
+        every=True,
+        private_names=["full", "dd", "hh", "mm", "mon", "yy"],
+        formatter=_parse_dtg_line,
     )
 
     rebulk.rules(ParseDTG)
@@ -86,55 +88,36 @@ def dtg():
 
 
 class ParseDTG(Rule):
-    """Parse DTG lines, validate year 1973-1979, produce parsed match.
+    """Validate DTG matches: must be within message content region, year 1973-1979.
 
-    Removes all original regex dtg matches and replaces them with a single
-    validated _dtg match containing {raw, precedence, date_iso}.
+    Removes invalid DTG matches. Valid matches are left in place with
+    their value already populated by the regex pattern's formatter.
     """
 
     priority = 32
-    consequence = [RemoveMatch, AppendMatch]
+    consequence = RemoveMatch
 
     def when(self, matches, context):
         text_ms = matches.markers.named("message_text_marker")
         attr_ms = matches.markers.named("message_attributes_marker")
         if len(text_ms) != 1 or len(attr_ms) != 1:
-            return list(matches.named("dtg")), []
+            return list(matches.named("dtg"))
 
         region_start = text_ms[0].end
         region_end = attr_ms[0].start
 
-        all_dtg = list(matches.named("dtg"))
-        if not all_dtg:
-            return False
-
         to_remove = []
-        to_append = []
-        for m in all_dtg:
+        for m in matches.named("dtg"):
             if not (region_start <= m.start < region_end):
                 to_remove.append(m)
                 continue
-            parsed = _parse_dtg_line(m.value)
-            if parsed is None or parsed["date_iso"] is None:
+            val = m.value
+            if val is None or not isinstance(val, dict) or val.get("date_iso") is None:
                 to_remove.append(m)
                 continue
-            year = int(parsed["date_iso"][:4])
+            year = int(val["date_iso"][:4])
             if year < 1973 or year > 1979:
                 to_remove.append(m)
                 continue
-            to_remove.append(m)
-            to_append.append(
-                Match(
-                    m.start,
-                    m.end,
-                    value={
-                        "raw": parsed["raw"],
-                        "precedence": parsed["precedence"],
-                        "date_iso": parsed["date_iso"],
-                    },
-                    name="dtg",
-                    tags=["parsed"],
-                )
-            )
 
-        return to_remove, to_append
+        return to_remove if to_remove else False

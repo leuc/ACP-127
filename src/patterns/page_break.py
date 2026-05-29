@@ -20,12 +20,15 @@ _KNOWN_END_MARKERS = {"NNN", "NNNN", "NNNNMAFVVZCZ", "<< END OF DOCUMENT >>"}
 def page_break():
     """Build pattern that matches page break and end-of-message markers."""
     rebulk = Rebulk()
+    rebulk.defaults(flags=re.MULTILINE)
 
     rebulk.regex(
-        r"^PAGE\s+\d+.*",
+        r"^PAGE\s+(?P<page_number>\d+).*",
         name="page_break",
         tags=["page_break"],
         flags=re.MULTILINE | re.IGNORECASE,
+        every=True,
+        private_names=["page_number"],
     )
 
     for marker in _KNOWN_END_MARKERS:
@@ -40,14 +43,12 @@ def page_break():
         r"^\*\*\* Current (?:Handling Restrictions|Classification) .*",
         name="content_footer_marker",
         tags=["content_footer"],
-        flags=re.MULTILINE,
     )
 
     rebulk.regex(
         r"^\s{4,}\-{10,}\s*\d+",
         name="dash_counter",
         tags=["dash_counter"],
-        flags=re.MULTILINE,
     )
 
     rebulk.rules(

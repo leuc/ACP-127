@@ -7,6 +7,7 @@ import sys
 
 from .builder import build_rebulk
 from .coverage import CoverageTracker
+from .serializer import result_to_dict
 
 
 def _discover_files(root_dir):
@@ -115,7 +116,7 @@ def process_batch(
             continue
 
         tracker.record(text, matches)
-        result = _result_to_dict(matches)
+        result = result_to_dict(matches)
         result["_file"] = filepath
         out_file.write(json.dumps(result, default=str) + "\n")
 
@@ -176,7 +177,7 @@ def _process_file_list(
             continue
 
         tracker.record(text, matches)
-        result = _result_to_dict(matches)
+        result = result_to_dict(matches)
         result["_file"] = filepath
         out_file.write(json.dumps(result, default=str) + "\n")
 
@@ -197,26 +198,3 @@ def _process_file_list(
     summary["files_processed"] = count
     summary["files_sampled"] = total
     return summary
-
-
-def _result_to_dict(matches):
-    attributes = {}
-    others = {}
-    for match in matches:
-        if match.private or match.marker or match.parent:
-            continue
-        name = match.name
-        if not name:
-            continue
-        value = match.value
-        if value is not None and isinstance(value, str):
-            value = value.strip()
-            if value.startswith(name + ":"):
-                value = value[len(name) + 1 :].strip()
-        if match.tags and "attribute" in match.tags:
-            attributes[name] = value
-        else:
-            others["_" + name] = value
-    result = {"Message Attributes": attributes}
-    result.update(others)
-    return result
