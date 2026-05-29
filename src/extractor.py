@@ -19,7 +19,14 @@ def extract_file(filepath):
     with open(filepath, "r", encoding="utf-8", errors="replace") as f:
         text = f.read()
     matches = extract_from_text(text)
-    return {"path": filepath, "matches": matches, "result": result_to_dict(matches)}
+    tracker = CoverageTracker()
+    tracker.record(text, matches)
+    return {
+        "path": filepath,
+        "matches": matches,
+        "result": result_to_dict(matches),
+        "coverage": tracker.summary(),
+    }
 
 
 def process_documents(root_dir, limit=None):
@@ -94,7 +101,14 @@ def main():
 
     if args.single:
         result = extract_file(args.single)
-        output = json.dumps(result["result"], indent=2)
+        result["result"]["_file"] = args.single
+        output = json.dumps(
+            {
+                "coverage": result["coverage"],
+                "results": [result["result"]],
+            },
+            indent=2,
+        )
         if args.output == "-":
             print(output)
         else:
@@ -117,16 +131,28 @@ def main():
             sample=args.sample,
         )
         summary_path = args.checkpoint or (args.output + ".summary.json")
+        output = json.dumps(
+            {
+                "coverage": {
+                    "documents_processed": summary.get("files_processed", 0),
+                    "documents_matched": summary.get("documents_matched", 0),
+                    "document_coverage_pct": summary.get("document_coverage_pct", 0.0),
+                    "byte_coverage_pct": summary.get("byte_coverage_pct", 0.0),
+                    "field_match_rates": summary.get("field_match_rates", {}),
+                },
+                "results": [],
+            },
+            indent=2,
+        )
         with open(summary_path, "w") as f:
-            json.dump(summary, f, indent=2)
-        print(json.dumps(summary, indent=2))
+            f.write(output)
+        print(output)
         return
 
     data = process_documents(args.root_dir, limit=args.limit)
     output = json.dumps(
         {
             "coverage": data["coverage"],
-            "count": len(data["results"]),
             "results": data["results"][:100]
             if len(data["results"]) > 100
             else data["results"],
