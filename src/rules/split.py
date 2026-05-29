@@ -38,7 +38,7 @@ class MessageContentRegion(Rule):
     TEXT ON-LINE — without it the message text is not available.
     """
 
-    priority = 192
+    priority = 144
     dependency = ValidateSingleMessageAttributes
     consequence = AppendMatch
 

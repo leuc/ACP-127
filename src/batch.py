@@ -103,11 +103,7 @@ def process_batch(
         tracker.record(text, matches)
         result = {
             "_file": filepath,
-            "fields": {
-                k: v
-                for k, v in _result_to_dict(matches).items()
-                if k != "message_content"
-            },
+            "fields": _result_to_dict(matches),
         }
         out_file.write(json.dumps(result, default=str) + "\n")
 
@@ -143,7 +139,7 @@ def _result_to_dict(matches):
         if match.private or match.marker or match.parent:
             continue
         name = match.name
-        if not name or name == "message_content":
+        if not name:
             continue
         value = match.value
         if value is not None and isinstance(value, str):
