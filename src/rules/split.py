@@ -81,10 +81,32 @@ class MessageContentRegion(Rule):
         if attr_start <= text_end:
             return False
 
+        raw = matches.input_string[text_end:attr_start]
+
+        # Strip content footer markers at higher priority
+        # (*** Current Handling Restrictions / Classification ***)
+        # before page break / classification marker lines.
+        # Using rebulk match positions avoids offset issues that
+        # a second regex pass on the processed value would have.
+        ranges = []
+        for m in matches.named("content_footer_marker"):
+            if text_end <= m.start < attr_start:
+                ranges.append((m.start - text_end, m.end - text_end))
+        for pb in matches.named("page_break"):
+            if text_end <= pb.start < attr_start:
+                ranges.append((pb.start - text_end, pb.end - text_end))
+        for cm in matches.named("classification_marker"):
+            if text_end <= cm.start < attr_start:
+                ranges.append((cm.start - text_end, cm.end - text_end))
+        if ranges:
+            ranges.sort(reverse=True)
+            for start, end in ranges:
+                raw = raw[:start] + raw[end:]
+
         m = Match(
             text_end,
             attr_start,
-            value=_strip_markings(matches.input_string[text_end:attr_start]),
+            value=_strip_markings(raw),
             name="message_content",
             tags=["region"],
         )

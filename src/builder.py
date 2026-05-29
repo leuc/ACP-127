@@ -6,6 +6,7 @@ from .patterns.markers import markers
 from .patterns.locator import locator
 from .patterns.attributes import attributes
 from .patterns.classification import classification
+from .patterns.page_break import page_break
 from .rules.split import (
     ValidateSingleMessageText,
     ValidateSingleMessageAttributes,
@@ -21,6 +22,7 @@ def build_rebulk():
     rebulk.rebulk(locator())
     rebulk.rebulk(attributes())
     rebulk.rebulk(classification())
+    rebulk.rebulk(page_break())
 
     rebulk.rules(
         ValidateSingleMessageText,
