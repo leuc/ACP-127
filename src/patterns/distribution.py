@@ -4,7 +4,7 @@ Appears at the start of message content, before the dash counter line.
 Parsed after page-break removal via dependency on MessageContentRegion.
 
 Output fields:
-  _distribution — {raw, parsed} where parsed is {ACTION: {CODE: count, ...}, INFO: {CODE: count, ...}}
+  _distribution — {raw, ACTION: {CODE: count, ...}, INFO: {CODE: count, ...}}
 """
 
 from rebulk import Rebulk, Rule, AppendMatch
@@ -110,7 +110,7 @@ class ParseDistribution(Rule):
             Match(
                 mc_start,
                 mc_start + len(dist_text),
-                value={"raw": dist_text, "parsed": parsed},
+                value={"raw": dist_text, **parsed},
                 name="distribution",
                 tags=["message_content"],
             )
