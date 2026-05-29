@@ -67,19 +67,21 @@ class CollectPageBreaks(Rule):
         if not markers:
             return False
 
-        page_numbers = []
+        page_entries = []
         for m in markers:
             text = m.raw.strip()
             parts = text.split()
+            entry = {"line": text}
             if len(parts) >= 2 and parts[0].upper() == "PAGE" and parts[1].isdigit():
-                page_numbers.append(int(parts[1]))
+                entry["page"] = int(parts[1])
+            page_entries.append(entry)
 
         to_remove = list(markers)
         to_append = [
             Match(
                 markers[0].start,
-                markers[0].end,
-                value=page_numbers,
+                markers[-1].end,
+                value=page_entries,
                 name="page_breaks",
                 tags=["page_break"],
             )

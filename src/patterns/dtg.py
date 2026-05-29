@@ -6,8 +6,7 @@ by precedence prosigns (§150): Z=FLASH, O=IMMEDIATE, P=PRIORITY, R=ROUTINE.
 Dual precedence (§152) is indicated by two prosigns (e.g. "P R").
 
 Output fields:
-  _dtg        — raw DTG line (e.g. "P R 041750Z SEP 75")
-  _dtg_parsed — {raw, precedence, date_iso}
+  _dtg — {raw, precedence, date_iso}
 """
 
 from datetime import datetime
@@ -87,10 +86,10 @@ def dtg():
 
 
 class ParseDTG(Rule):
-    """Parse DTG lines, validate year 1973-1979, produce raw + parsed matches.
+    """Parse DTG lines, validate year 1973-1979, produce parsed match.
 
-    Removes all original regex dtg matches and replaces them with validated
-    dtg (raw string) and dtg_parsed ({raw, precedence, date_iso}) matches.
+    Removes all original regex dtg matches and replaces them with a single
+    validated _dtg match containing {raw, precedence, date_iso}.
     """
 
     priority = 32
@@ -128,21 +127,12 @@ class ParseDTG(Rule):
                 Match(
                     m.start,
                     m.end,
-                    value=parsed["raw"],
-                    name="dtg",
-                    tags=["message_content"],
-                )
-            )
-            to_append.append(
-                Match(
-                    m.start,
-                    m.end,
                     value={
                         "raw": parsed["raw"],
                         "precedence": parsed["precedence"],
                         "date_iso": parsed["date_iso"],
                     },
-                    name="dtg_parsed",
+                    name="dtg",
                     tags=["parsed"],
                 )
             )
