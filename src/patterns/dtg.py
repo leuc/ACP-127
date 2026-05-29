@@ -61,8 +61,14 @@ def _parse_dtg_line(line):
     if not m:
         return None
     g = m.groupdict()
+    dd, hh, mm = int(g["dd"]), int(g["hh"]), int(g["mm"])
+    if dd < 1 or dd > 31 or hh > 23 or mm > 59:
+        return None
     yyyy = _parse_year(g["yy"])
-    dt = datetime(yyyy, _MONTHS[g["mon"]], int(g["dd"]), int(g["hh"]), int(g["mm"]))
+    try:
+        dt = datetime(yyyy, _MONTHS[g["mon"]], dd, hh, mm)
+    except ValueError:
+        return None
     prec_raw = g["full"][: g["full"].index(g["dd"])].strip()
     return {
         "raw": g["full"],
