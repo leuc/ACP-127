@@ -2,12 +2,14 @@
 
 The dash counter is a line of 10+ dashes followed by a count number,
 found at the top of the message body. It is extracted and removed
-independently of the ordered stripping pipeline.
+from message_content.
 """
 
-from rebulk import Rebulk, Rule, AppendMatch, RemoveMatch
+from rebulk import Rebulk, Rule
 from rebulk.match import Match
 from rebulk.remodule import re
+
+from ..rules.message_content import StripContentText
 
 
 def dash_counter():
@@ -34,7 +36,7 @@ class CollectDashCounters(Rule):
     """
 
     priority = 32
-    consequence = [RemoveMatch, AppendMatch]
+    consequence = StripContentText()
 
     def when(self, matches, context):
         markers = list(matches.named("dash_counter"))
@@ -45,14 +47,11 @@ class CollectDashCounters(Rule):
         parts = first.raw.strip().split()
         num = int(parts[-1]) if parts and parts[-1].isdigit() else 0
 
-        to_remove = list(markers)
-        to_append = [
-            Match(
-                first.start,
-                first.end,
-                value=num,
-                name="dash_counters",
-                tags=["dash_counter"],
-            )
-        ]
-        return to_remove, to_append
+        dc_match = Match(
+            first.start,
+            first.end,
+            value=num,
+            name="dash_counters",
+            tags=["dash_counter"],
+        )
+        return markers, [first.raw], [dc_match]

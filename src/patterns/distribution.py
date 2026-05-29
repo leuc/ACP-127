@@ -7,11 +7,11 @@ Output fields:
   _distribution — {raw, ACTION: {CODE: count, ...}, INFO: {CODE: count, ...}}
 """
 
-from rebulk import Rebulk, Rule, AppendMatch
+from rebulk import Rebulk, Rule
 from rebulk.match import Match
 from rebulk.remodule import re
 
-from ..rules.message_content import BuildMessageContent
+from ..rules.message_content import BuildMessageContent, StripContentText
 
 _DASH_RE = re.compile(r"^\s{4,}\-{10,}\s*\d+", re.MULTILINE)
 _CODE_RE = re.compile(r"(?P<code>\w+)-(?P<count>\d+)")
@@ -86,7 +86,7 @@ class ParseDistribution(Rule):
 
     priority = 64
     dependency = BuildMessageContent
-    consequence = AppendMatch
+    consequence = StripContentText()
 
     def when(self, matches, context):
         mc = matches.named("message_content")
@@ -106,12 +106,11 @@ class ParseDistribution(Rule):
         if not parsed:
             return False
 
-        return [
-            Match(
-                mc_start,
-                mc_start + len(dist_text),
-                value={"raw": dist_text, **parsed},
-                name="distribution",
-                tags=["message_content"],
-            )
-        ]
+        dist_match = Match(
+            mc_start,
+            mc_start + len(dist_text),
+            value={"raw": dist_text, **parsed},
+            name="distribution",
+            tags=["message_content"],
+        )
+        return [], [dist_text], [dist_match]

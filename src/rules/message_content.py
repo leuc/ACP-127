@@ -40,6 +40,49 @@ def _strip_ranges_from_text(text, ranges):
     return text
 
 
+class StripContentText(Consequence):
+    """Strip text from message_content, remove matches, and append new matches.
+
+    Expects `when_response` as ``(to_remove_matches, texts_to_strip, to_append_matches)``:
+      to_remove_matches — Match objects to remove from the match set
+      texts_to_strip — strings to find and remove from message_content.value
+      to_append_matches — Match objects to append to the match set
+    """
+
+    def then(self, matches, when_response, context):
+        to_remove, texts_to_strip, to_append = when_response
+
+        for m in to_remove:
+            if m in matches:
+                matches.remove(m)
+
+        mc = matches.named("message_content")
+        if mc and texts_to_strip:
+            old = mc[0]
+            current = old.value
+            for t in texts_to_strip:
+                if current.startswith(t):
+                    current = current[len(t) :]
+                else:
+                    idx = current.find(t)
+                    if idx >= 0:
+                        current = current[:idx] + current[idx + len(t) :]
+            matches.remove(old)
+            matches.append(
+                Match(
+                    old.start,
+                    old.end,
+                    value=current,
+                    name=old.name,
+                    tags=old.tags,
+                )
+            )
+
+        for m in to_append:
+            matches.append(m)
+        return True
+
+
 class FinalizeMessageContent(Consequence):
     """Strip remaining markers, build message_content."""
 
