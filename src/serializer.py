@@ -6,6 +6,23 @@ Every document produces a flat JSON object with:
 """
 
 
+def normalize_match_value(name, value):
+    """Normalize a match value: strip, remove name: prefix, convert N/A to None."""
+    if value is None or not isinstance(value, str):
+        return value
+    value = value.strip()
+    if value.startswith(name + ":"):
+        value = value[len(name) + 1 :].strip()
+    if value.lower() in ("n/a", "na", ""):
+        value = None
+    return value
+
+
+def is_na_value(name, value):
+    """Return True if this match's value is a meaningless placeholder."""
+    return normalize_match_value(name, value) is None
+
+
 def result_to_dict(matches):
     attributes = {}
     others = {}
@@ -15,14 +32,7 @@ def result_to_dict(matches):
         name = match.name
         if not name:
             continue
-        value = match.value
-        if value is not None and isinstance(value, str):
-            value = value.strip()
-            if value.startswith(name + ":"):
-                value = value[len(name) + 1 :].strip()
-            # Normalize common placeholder values to None for better coverage accuracy
-            if value.lower() in ("n/a", "na", "") or value == "N/A":
-                value = None
+        value = normalize_match_value(name, match.value)
         if match.tags and "attribute" in match.tags:
             attributes[name] = value
         else:

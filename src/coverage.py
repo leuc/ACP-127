@@ -2,6 +2,8 @@
 
 from collections import Counter
 
+from .serializer import is_na_value
+
 
 class CoverageTracker:
     """Tracks byte coverage across documents and document-level match coverage."""
@@ -33,7 +35,7 @@ class CoverageTracker:
             if match.private or match.marker:
                 continue
             name = match.name
-            if name and name not in seen:
+            if name and name not in seen and not is_na_value(name, match.value):
                 seen.add(name)
                 self.field_counts[name] += 1
 
