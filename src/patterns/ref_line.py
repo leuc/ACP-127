@@ -4,7 +4,7 @@ Reference lines appear in the message body header, often after TAGS/E.O./SUBJECT
 They can span multiple lines with continuation lines.
 
 Output field:
-  _ref — list of reference strings, each line as a separate item
+  reference — list of reference strings, each line as a separate item
 """
 
 from rebulk import Rebulk, Rule
@@ -73,7 +73,7 @@ class ParseRef(Rule):
             mc_start + start,
             mc_start + m.end() + cont_end_offset,
             value=items,
-            name="ref",
+            name="reference",
             tags=["message_content"],
         )
 
