@@ -23,6 +23,9 @@ def extract_from_text(text, context=None):
 def _discover_files(paths):
     """Yield all .txt and .tel files under given paths (files or directories)."""
     for path in paths:
+        if not os.path.exists(path):
+            sys.stderr.write(f"WARNING: {path} does not exist, skipping\n")
+            continue
         if os.path.isfile(path):
             if path.endswith((".txt", ".tel")):
                 yield path
@@ -31,7 +34,8 @@ def _discover_files(paths):
                 for filename in sorted(filenames):
                     if filename.endswith((".txt", ".tel")):
                         yield os.path.join(dirpath, filename)
-        # If the path does not exist, we simply skip it (no warning)
+        else:
+            sys.stderr.write(f"WARNING: {path} is not a file or directory, skipping\n")
 
 
 def main():
@@ -66,12 +70,6 @@ def main():
         sys.stderr.write("No .txt or .tel files found.\n")
         sys.exit(1)
 
-    # Discover all candidate files
-    all_files = list(_discover_files(args.inputs))
-    if not all_files:
-        sys.stderr.write("No .txt or .tel files found.\n")
-        sys.exit(1)
-
     # Apply sampling if requested
     if args.sample is not None:
         random.seed(0)  # deterministic sampling
@@ -96,13 +94,13 @@ def main():
             with open(filepath, "r", encoding="utf-8", errors="replace") as f:
                 text = f.read()
         except Exception as e:
-            # Skip file on read error
+            sys.stderr.write(f"ERROR: Failed to read {filepath}: {e}\n")
             continue
 
         try:
             matches = rebulk.matches(text)
         except Exception as e:
-            # Skip file on match error
+            sys.stderr.write(f"ERROR: Failed to process matches for {filepath}: {e}\n")
             continue
 
         tracker.record(text, matches)
@@ -117,12 +115,18 @@ def main():
 
         processed += 1
 
-    # Final coverage to stderr
+    # Final coverage to stderr (plain text)
     summary = tracker.summary()
-    coverage_output = json.dumps({"coverage": summary})
-    if isinstance(coverage_output, bytes):
-        coverage_output = coverage_output.decode("utf-8")
-    sys.stderr.write(coverage_output + "\n")
+    for key, value in summary.items():
+        if key == "field_match_rates":
+            sys.stderr.write(f"{key}:\n")
+            for k, v in value.items():
+                sys.stderr.write(f"    {k}: {v:.2f}\n")
+        else:
+            if isinstance(value, float):
+                sys.stderr.write(f"{key}: {value:.2f}\n")
+            else:
+                sys.stderr.write(f"{key}: {value}\n")
 
 
 if __name__ == "__main__":
