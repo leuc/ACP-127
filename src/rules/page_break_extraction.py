@@ -23,8 +23,11 @@ class StripPageBreaks(Consequence):
         for m in sorted(pb_matches, key=lambda m: m.start, reverse=True):
             s = m.start - text_end
             e = m.end - text_end
+            m_s = s
             while s > 0 and raw[s - 1] in "\n\r":
                 s -= 1
+            if s < m_s:
+                s += 1
             while e < len(raw) and raw[e] in "\n\r":
                 e += 1
             ranges.append((s, e))

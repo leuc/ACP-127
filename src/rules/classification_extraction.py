@@ -22,11 +22,19 @@ class StripClassificationMarkers(Consequence):
         text_end, attr_start, all_matches, valid_matches, output_value = when_response
 
         ranges = context.setdefault("_strip_ranges", [])
+        raw = matches.input_string[text_end:attr_start]
         for m in all_matches:
             start = m.start - text_end
             end = m.end - text_end
+            m_start = start
             if start < 0:
                 start = 0
+            while start > 0 and raw[start - 1] in "\n\r":
+                start -= 1
+            if start < m_start:
+                start += 1
+            while end < len(raw) and raw[end] in "\n\r":
+                end += 1
             ranges.append((start, end))
 
         for old in matches.named("classification_marker"):

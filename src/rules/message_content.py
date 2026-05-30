@@ -51,22 +51,33 @@ class FinalizeMessageContent(Consequence):
         ranges = list(ranges)
 
         for m in remaining_matches:
+            start = m.start - text_end
+            end = m.end - text_end
+            m_start = start
+            if start < 0:
+                start = 0
             if m.name == "content_footer_marker":
-                start = m.start - text_end
-                end = m.end - text_end
-                if start < 0:
-                    start = 0
+                while start > 0 and raw[start - 1] in "\n\r":
+                    start -= 1
+                if start < m_start:
+                    start += 1
+                while end < len(raw) and raw[end] in "\n\r":
+                    end += 1
                 ranges.append((start, end))
             elif m.name == "marking_line":
-                s = m.start - text_end
-                while s > 0 and raw[s - 1] not in "\n\r":
-                    s -= 1
-                e = m.end - text_end
-                while e < len(raw) and raw[e] not in "\n\r":
-                    e += 1
-                if e < len(raw):
-                    e += 1
-                ranges.append((s, e))
+                while start > 0 and raw[start - 1] not in "\n\r":
+                    start -= 1
+                while end < len(raw) and raw[end] not in "\n\r":
+                    end += 1
+                if end < len(raw):
+                    end += 1
+                while start > 0 and raw[start - 1] in "\n\r":
+                    start -= 1
+                if start < m_start:
+                    start += 1
+                while end < len(raw) and raw[end] in "\n\r":
+                    end += 1
+                ranges.append((start, end))
 
         merged = _merge_ranges(ranges)
         cleaned = _strip_ranges_from_text(raw, merged)
