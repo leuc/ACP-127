@@ -19,6 +19,7 @@ from .patterns.eo_line import eo_line
 from .patterns.tags_line import tags_line
 from .patterns.subject_line import subject_line
 from .patterns.ref_line import ref_line
+from .patterns.section_marker import section_marker
 from .rules.validate import (
     ValidateSingleMessageText,
     ValidateSingleMessageAttributes,
@@ -51,6 +52,7 @@ def build_rebulk():
     rebulk.rebulk(tags_line())
     rebulk.rebulk(subject_line())
     rebulk.rebulk(ref_line())
+    rebulk.rebulk(section_marker())
 
     rebulk.rules(
         ValidateSingleMessageText,
