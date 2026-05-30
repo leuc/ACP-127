@@ -23,6 +23,16 @@ _CLASSIFICATIONS = [
 ]
 
 
+def _spaced_alternation():
+    """Build alternation pattern for classifications with spaced-out letters."""
+    parts = []
+    for cls in _CLASSIFICATIONS:
+        words = cls.split()
+        spaced_words = [" ".join(word) for word in words]
+        parts.append(r"\s+".join(spaced_words))
+    return "|".join(parts)
+
+
 def section_marker():
     """Build pattern that matches section header lines."""
     rebulk = Rebulk()
@@ -37,6 +47,21 @@ def section_marker():
         every=True,
         private_names=[
             "classification",
+            "section_number",
+            "section_total",
+            "section_id",
+        ],
+    )
+
+    rebulk.regex(
+        r"^(?:"
+        + _spaced_alternation()
+        + r")\s+SECTION\s+(?P<section_number>\d+)\s+OF\s+(?P<section_total>\d+)\s+(?P<section_id>.+)$",
+        name="section_marker",
+        tags=["message_content"],
+        flags=re.MULTILINE,
+        every=True,
+        private_names=[
             "section_number",
             "section_total",
             "section_id",
