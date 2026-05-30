@@ -29,6 +29,7 @@ from .rules.classification_extraction import ExtractClassificationMarker
 from .rules.page_break_extraction import ExtractPageBreak
 from .rules.end_marker_removal import RemoveEndMarker
 from .rules.message_content import BuildMessageContent
+from .rules.header_removal import RemoveHeaders
 
 
 def build_rebulk():
@@ -62,6 +63,7 @@ def build_rebulk():
         ExtractPageBreak,
         RemoveEndMarker,
         BuildMessageContent,
+        RemoveHeaders,
     )
 
     return rebulk
