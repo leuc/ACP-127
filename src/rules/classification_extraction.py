@@ -19,10 +19,10 @@ class StripClassificationMarkers(Consequence):
     """Strip classification markers from text, output aggregated match."""
 
     def then(self, matches, when_response, context):
-        text_end, attr_start, cm_matches, output_value = when_response
+        text_end, attr_start, all_matches, valid_matches, output_value = when_response
 
         ranges = context.setdefault("_strip_ranges", [])
-        for m in cm_matches:
+        for m in all_matches:
             start = m.start - text_end
             end = m.end - text_end
             if start < 0:
@@ -35,8 +35,8 @@ class StripClassificationMarkers(Consequence):
 
         matches.append(
             Match(
-                cm_matches[0].start,
-                cm_matches[-1].end,
+                valid_matches[0].start,
+                valid_matches[-1].end,
                 value=output_value,
                 name="classification_marker",
                 tags=["classification"],
@@ -78,7 +78,7 @@ class ExtractClassificationMarker(Rule):
             return False
 
         unique_values = list(dict.fromkeys(m.raw.strip().upper() for m in valid))
-        return text_end, attr_start, valid, unique_values
+        return text_end, attr_start, cm_matches, valid, unique_values
 
     def _filter_adjacent(self, cm_matches, matches, text_end, attr_start):
         """Only keep markers directly NEXT to page_break or end_marker."""
