@@ -111,7 +111,9 @@ def main():
                 "coverage": result["coverage"],
                 "results": [result["result"]],
             }
-        ).decode("utf-8")
+        )
+        if isinstance(output, bytes):
+            output = output.decode("utf-8")
         if args.output == "-":
             print(output)
         else:
@@ -145,7 +147,9 @@ def main():
                 },
                 "results": [],
             }
-        ).decode("utf-8")
+        )
+        if isinstance(output, bytes):
+            output = output.decode("utf-8")
         with open(summary_path, "w") as f:
             f.write(output)
         print(output)
@@ -155,11 +159,11 @@ def main():
     output = json.dumps(
         {
             "coverage": data["coverage"],
-            "results": data["results"][:100]
-            if len(data["results"]) > 100
-            else data["results"],
+            "results": data["results"],
         }
-    ).decode("utf-8")
+    )
+    if isinstance(output, bytes):
+        output = output.decode("utf-8")
 
     if args.output == "-":
         print(output)
