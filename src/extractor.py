@@ -31,8 +31,7 @@ def _discover_files(paths):
                 for filename in sorted(filenames):
                     if filename.endswith((".txt", ".tel")):
                         yield os.path.join(dirpath, filename)
-        else:
-            sys.stderr.write(f"WARNING: {path} does not exist, skipping\n")
+        # If the path does not exist, we simply skip it (no warning)
 
 
 def main():
@@ -67,17 +66,19 @@ def main():
         sys.stderr.write("No .txt or .tel files found.\n")
         sys.exit(1)
 
+    # Discover all candidate files
+    all_files = list(_discover_files(args.inputs))
+    if not all_files:
+        sys.stderr.write("No .txt or .tel files found.\n")
+        sys.exit(1)
+
     # Apply sampling if requested
-    selected = []  # Ensure variable is defined for later reference
     if args.sample is not None:
         random.seed(0)  # deterministic sampling
         if args.sample >= len(all_files):
             selected = all_files
         else:
             selected = random.sample(all_files, args.sample)
-        sys.stderr.write(
-            f"Randomly sampled {len(selected)} files from {len(all_files)} total\n"
-        )
         files_to_process = selected
     else:
         files_to_process = all_files
@@ -85,18 +86,6 @@ def main():
     # Apply limit if requested (after sampling)
     if args.limit is not None:
         files_to_process = files_to_process[: args.limit]
-        if len(files_to_process) < len(all_files):
-            sys.stderr.write(
-                f"Limited to {len(files_to_process)} files (from {len(all_files)} total"
-                + (
-                    f", after sampling {len(selected)}"
-                    if args.sample is not None
-                    else ""
-                )
-                + ")\n"
-            )
-
-    sys.stderr.write(f"Processing {len(files_to_process)} files...\n")
 
     rebulk = build_rebulk()
     tracker = CoverageTracker()
@@ -107,13 +96,13 @@ def main():
             with open(filepath, "r", encoding="utf-8", errors="replace") as f:
                 text = f.read()
         except Exception as e:
-            sys.stderr.write(f"ERROR reading {filepath}: {e}\n")
+            # Skip file on read error
             continue
 
         try:
             matches = rebulk.matches(text)
         except Exception as e:
-            sys.stderr.write(f"ERROR matching {filepath}: {e}\n")
+            # Skip file on match error
             continue
 
         tracker.record(text, matches)

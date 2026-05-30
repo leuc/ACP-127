@@ -20,6 +20,9 @@ def result_to_dict(matches):
             value = value.strip()
             if value.startswith(name + ":"):
                 value = value[len(name) + 1 :].strip()
+            # Normalize common placeholder values to None for better coverage accuracy
+            if value.lower() in ("n/a", "na", "") or value == "N/A":
+                value = None
         if match.tags and "attribute" in match.tags:
             attributes[name] = value
         else:
