@@ -1,4 +1,4 @@
-"""Main extraction engine — iterates over txt files and runs the rebulk pipeline."""
+"""Main extraction engine — iterates over txt/tel files and runs the rebulk pipeline."""
 
 try:
     import orjson as json
@@ -7,6 +7,7 @@ except ImportError:
 
 import os
 import sys
+import random
 
 from .builder import build_rebulk
 from .coverage import CoverageTracker
@@ -19,81 +20,37 @@ def extract_from_text(text, context=None):
     return matches
 
 
-def extract_file(filepath):
-    with open(filepath, "r", encoding="utf-8", errors="replace") as f:
-        text = f.read()
-    matches = extract_from_text(text)
-    tracker = CoverageTracker()
-    tracker.record(text, matches)
-    return {
-        "path": filepath,
-        "matches": matches,
-        "result": result_to_dict(matches),
-        "coverage": tracker.summary(),
-    }
-
-
-def process_documents(root_dir, limit=None):
-    rebulk = build_rebulk()
-    tracker = CoverageTracker()
-    results = []
-    count = 0
-
-    for dirpath, dirnames, filenames in os.walk(root_dir):
-        for filename in sorted(filenames):
-            if not filename.endswith(".txt"):
-                continue
-
-            filepath = os.path.join(dirpath, filename)
-            with open(filepath, "r", encoding="utf-8", errors="replace") as f:
-                text = f.read()
-
-            matches = rebulk.matches(text)
-            tracker.record(text, matches)
-            result = result_to_dict(matches)
-            if result:
-                result["_file"] = filepath
-                results.append(result)
-
-            count += 1
-            if limit and count >= limit:
-                break
-        if limit and count >= limit:
-            break
-
-    return {
-        "coverage": tracker.summary(),
-        "results": results,
-    }
+def _discover_files(paths):
+    """Yield all .txt and .tel files under given paths (files or directories)."""
+    for path in paths:
+        if os.path.isfile(path):
+            if path.endswith((".txt", ".tel")):
+                yield path
+        elif os.path.isdir(path):
+            for dirpath, dirnames, filenames in os.walk(path):
+                for filename in sorted(filenames):
+                    if filename.endswith((".txt", ".tel")):
+                        yield os.path.join(dirpath, filename)
+        else:
+            sys.stderr.write(f"WARNING: {path} does not exist, skipping\n")
 
 
 def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Extract ACP-127 fields from telegram text files"
-    )
-    parser.add_argument("root_dir", help="Root directory of txtv2 files")
-    parser.add_argument(
-        "--limit", type=int, default=None, help="Limit number of files to process"
-    )
-    parser.add_argument("--output", default="-", help="Output file (default: stdout)")
-    parser.add_argument("--single", help="Process a single file")
-    parser.add_argument(
-        "--batch",
-        action="store_true",
-        help="Use index.csv for file discovery with NDJSON output",
+        description="Extract ACP-127 fields from telegram text/tel files"
     )
     parser.add_argument(
-        "--checkpoint",
-        default=None,
-        help="Checkpoint file for batch resume",
+        "inputs",
+        nargs="+",
+        help="Files or directories to process (directories are walked for *.txt/*.tel)",
     )
     parser.add_argument(
-        "--progress",
+        "--limit",
         type=int,
-        default=10000,
-        help="Progress report interval (default: 10000)",
+        default=None,
+        help="Limit number of files to process",
     )
     parser.add_argument(
         "--sample",
@@ -101,75 +58,82 @@ def main():
         default=None,
         help="Randomly sample N files (overrides --limit)",
     )
+
     args = parser.parse_args()
 
-    if args.single:
-        result = extract_file(args.single)
-        result["result"]["_file"] = args.single
-        output = json.dumps(
-            {
-                "coverage": result["coverage"],
-                "results": [result["result"]],
-            }
-        )
-        if isinstance(output, bytes):
-            output = output.decode("utf-8")
-        if args.output == "-":
-            print(output)
+    # Discover all candidate files
+    all_files = list(_discover_files(args.inputs))
+    if not all_files:
+        sys.stderr.write("No .txt or .tel files found.\n")
+        sys.exit(1)
+
+    # Apply sampling if requested
+    selected = []  # Ensure variable is defined for later reference
+    if args.sample is not None:
+        random.seed(0)  # deterministic sampling
+        if args.sample >= len(all_files):
+            selected = all_files
         else:
-            with open(args.output, "w") as f:
-                f.write(output)
-        return
-
-    if args.batch or args.sample:
-        if args.output == "-":
-            print("--batch/--sample requires --output FILE", file=sys.stderr)
-            sys.exit(1)
-        from .batch import process_batch
-
-        summary = process_batch(
-            args.root_dir,
-            output_path=args.output,
-            checkpoint_path=args.checkpoint,
-            limit=args.limit,
-            progress_interval=args.progress,
-            sample=args.sample,
+            selected = random.sample(all_files, args.sample)
+        sys.stderr.write(
+            f"Randomly sampled {len(selected)} files from {len(all_files)} total\n"
         )
-        summary_path = args.checkpoint or (args.output + ".summary.json")
-        output = json.dumps(
-            {
-                "coverage": {
-                    "documents_processed": summary.get("files_processed", 0),
-                    "documents_matched": summary.get("documents_matched", 0),
-                    "document_coverage_pct": summary.get("document_coverage_pct", 0.0),
-                    "byte_coverage_pct": summary.get("byte_coverage_pct", 0.0),
-                    "field_match_rates": summary.get("field_match_rates", {}),
-                },
-                "results": [],
-            }
-        )
-        if isinstance(output, bytes):
-            output = output.decode("utf-8")
-        with open(summary_path, "w") as f:
-            f.write(output)
-        print(output)
-        return
-
-    data = process_documents(args.root_dir, limit=args.limit)
-    output = json.dumps(
-        {
-            "coverage": data["coverage"],
-            "results": data["results"],
-        }
-    )
-    if isinstance(output, bytes):
-        output = output.decode("utf-8")
-
-    if args.output == "-":
-        print(output)
+        files_to_process = selected
     else:
-        with open(args.output, "w") as f:
-            f.write(output)
+        files_to_process = all_files
+
+    # Apply limit if requested (after sampling)
+    if args.limit is not None:
+        files_to_process = files_to_process[: args.limit]
+        if len(files_to_process) < len(all_files):
+            sys.stderr.write(
+                f"Limited to {len(files_to_process)} files (from {len(all_files)} total"
+                + (
+                    f", after sampling {len(selected)}"
+                    if args.sample is not None
+                    else ""
+                )
+                + ")\n"
+            )
+
+    sys.stderr.write(f"Processing {len(files_to_process)} files...\n")
+
+    rebulk = build_rebulk()
+    tracker = CoverageTracker()
+    processed = 0
+
+    for filepath in files_to_process:
+        try:
+            with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+                text = f.read()
+        except Exception as e:
+            sys.stderr.write(f"ERROR reading {filepath}: {e}\n")
+            continue
+
+        try:
+            matches = rebulk.matches(text)
+        except Exception as e:
+            sys.stderr.write(f"ERROR matching {filepath}: {e}\n")
+            continue
+
+        tracker.record(text, matches)
+        result = result_to_dict(matches)
+        if result:
+            result["_file"] = filepath
+            # Output result as JSON line to stdout
+            output = json.dumps(result)
+            if isinstance(output, bytes):
+                output = output.decode("utf-8")
+            print(output)
+
+        processed += 1
+
+    # Final coverage to stderr
+    summary = tracker.summary()
+    coverage_output = json.dumps({"coverage": summary})
+    if isinstance(coverage_output, bytes):
+        coverage_output = coverage_output.decode("utf-8")
+    sys.stderr.write(coverage_output + "\n")
 
 
 if __name__ == "__main__":
