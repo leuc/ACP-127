@@ -30,9 +30,24 @@ _HEADER_NAMES = {
     "ref",
     "section_marker",
     "dash_counters",
+    "info",
+    "drafted_by",
+    "approved_by",
+    "executive_order",
+    "tags",
 }
 _ORIGINAL_COORDS = {"dtg", "from"}
-_CLEANED_COORDS = {"distribution", "to", "subject", "ref"}
+_CLEANED_COORDS = {
+    "distribution",
+    "to",
+    "subject",
+    "ref",
+    "info",
+    "drafted_by",
+    "approved_by",
+    "executive_order",
+    "tags",
+}
 
 
 def _find_ranges(mc_value, text_end, header_matches, input_string):
