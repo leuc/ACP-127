@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 
 from rebulk import Rebulk
 
+from station_data import _VARIANT_TO_TARGET
 from station_index import StationIndex
 
 # ── Pre-processing constants ────────────────────────────────────────────────
@@ -144,19 +145,6 @@ _STAGES: list[StageDef] = [
         r"\b(?P<station>{stations})\s+(?P<number>\d{{1,10}})\b",
         is_airgram=False,
         priority=700,
-    ),
-    # ── Generic fallback (catches typos / unknown stations via fuzzy) ──
-    StageDef(
-        "cable_fallback_generic",
-        r"\b(?P<station>[A-Z]{{3,80}}(?:\s+[A-Z]{{3,}})*)\s+(?P<number>\d{{1,10}})\b",
-        is_airgram=False,
-        priority=690,
-    ),
-    StageDef(
-        "airgram_fallback_generic",
-        r"\b(?P<station>[A-Z]{{3,80}}(?:\s+[A-Z]{{3,}})*)\s+A-?(?P<number>\d{{1,10}})\b",
-        is_airgram=True,
-        priority=1090,
     ),
 ]
 
@@ -459,8 +447,10 @@ def main():
                         norm_station = raw_station.strip().upper()
                         if norm_station in station_index._canonical_set:
                             coverage.record_station_resolution("exact_joined")
-                        else:
+                        elif norm_station in _VARIANT_TO_TARGET:
                             coverage.record_station_resolution("exact_variant")
+                        else:
+                            coverage.record_station_resolution("fuzzy")
 
                         year = groups.get("year", doc_year)
                         if not year:

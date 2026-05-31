@@ -64,11 +64,15 @@ _STOP_STATIONS = frozenset(
         "FRIDAY",
         "SATURDAY",
         "SUNDAY",
+        "PART",
+        "SECT",
+        "ITEM",
+        "NOTE",
     ]
 )
 
 _MIN_STATION_LEN = 3
-_FUZZY_CUTOFF = 0.85
+_FUZZY_CUTOFF = 0.90
 
 
 class StationIndex:

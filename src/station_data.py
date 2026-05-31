@@ -163,6 +163,7 @@ STATIONS = {
     "BANGKOK": [
         "BANGKOK",
         "BANGKO",
+        "BANGKOOK",
         "ANGKOK",
         "ANGKO",
     ],
@@ -289,6 +290,7 @@ STATIONS = {
     ],
     "BRIDGETOWN": [
         "BRIDGETOWN",
+        "BRIDGETOAN",
     ],
     "BRISBA": [
         "BRISBA",
@@ -321,6 +323,7 @@ STATIONS = {
     ],
     "BUENOSAIRES": [
         "BUENOS AIRES",
+        "BUENOS AIES",
         "BUENOSAIRES",
     ],
     "BUJUMB": [
