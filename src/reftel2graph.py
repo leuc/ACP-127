@@ -11,7 +11,7 @@ def main():
 
     src = sys.argv[1]
     dest = sys.argv[2]
-    
+
     if not os.path.exists(src):
         sys.stderr.write(f"Error: Input file not found: {src}\n")
         sys.exit(1)
@@ -30,11 +30,15 @@ def main():
             line = line.strip()
             if not line:
                 continue
-            
+
             row = json.loads(line)
             doc = row.get("document_number")
-            
+
             if not doc:
+                continue
+
+            refs = row.get("extracted_references")
+            if not refs:
                 continue
 
             # Mark this document as a known primary node
@@ -45,12 +49,11 @@ def main():
             if doc_date:
                 node_dates[doc] = doc_date
 
-            refs = row.get("extracted_references", [])
-            
+
             for r in refs:
                 edges.add((doc, r))
                 vertices.add(r)
-                
+
             count += 1
             if count % 500000 == 0:
                 sys.stderr.write(f"  {count} lines...\n")
@@ -59,16 +62,16 @@ def main():
 
     ids = sorted(vertices)
     idx = {v: i for i, v in enumerate(ids)}
-    
+
     edge_list = [(idx[f], idx[t]) for f, t in sorted(edges)]
 
     sys.stderr.write("Building graph...\n")
     g = igraph.Graph(edge_list, directed=True)
-    
+
     # Map node properties
     g.vs["label"] = ids
     g.vs["date"] = [node_dates.get(vid, "") for vid in ids]
-    
+
     # Flag missing documents: True if it ONLY appeared as a reference
     g.vs["missing"] = [vid not in primary_docs for vid in ids]
 

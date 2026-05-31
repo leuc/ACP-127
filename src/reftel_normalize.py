@@ -204,6 +204,42 @@ def _preprocess(ref: str) -> str | None:
     return text.strip() or None
 
 
+def _normalize_doc_number(
+    doc_number: str, station_index: StationIndex, rebulk: Rebulk
+) -> str | None:
+    cleaned = _preprocess(doc_number)
+    if not cleaned:
+        return None
+    matches = rebulk.matches(cleaned)
+    for stage in _STAGES:
+        for m in matches.named(stage.name):
+            groups = _extract_groups(m)
+            raw_station = groups.get("station", "").strip()
+            raw_number = groups.get("number", "").strip()
+            if not raw_station or not raw_number:
+                continue
+            if len(raw_station) < _MIN_STATION_LEN:
+                continue
+            if station_index.is_stop_station(raw_station):
+                continue
+            if stage.name == "airgram_fallback_compact":
+                if (
+                    station_index.resolve(raw_station + "A", allow_fuzzy=False)
+                    is not None
+                ):
+                    continue
+            canonical = station_index.resolve(
+                raw_station, allow_fuzzy=not stage.is_airgram
+            )
+            if not canonical:
+                continue
+            year = groups.get("year", "")
+            year = _clean_year(year) if year else ""
+            number = _clean_number(raw_number)
+            return _format_canonical(year, canonical, number, stage.is_airgram)
+    return None
+
+
 def _build_rebulk(station_index: StationIndex) -> Rebulk:
     r = Rebulk()
     stations_alt = station_index.alternation_pattern()
@@ -456,8 +492,9 @@ def main():
 
             coverage.record_doc(len(refs), len(normalized))
 
+            doc_number_norm = _normalize_doc_number(doc_number, station_index, rebulk)
             result = {
-                "document_number": doc_number,
+                "document_number": doc_number_norm or doc_number,
                 "date": doc_date,
                 "extracted_references": normalized if normalized else None,
             }
