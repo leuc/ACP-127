@@ -4,7 +4,7 @@ Reference lines appear in the message body header, often after TAGS/E.O./SUBJECT
 They can span multiple lines with continuation lines.
 
 Output field:
-  reference — list of reference strings, each line as a separate item
+  reference — list of reference strings, each individual reference as a separate item
 """
 
 from rebulk import Rebulk, Rule
@@ -31,11 +31,18 @@ class ParseRef(Rule):
         r"^(?:REF(?:ERENCE)?S?\s*:|REF\s*:|REFTEL:|RETELS?\s*:)\s*(.*?)$",
         re.MULTILINE | re.IGNORECASE,
     )
-    _CONT_PAT = re.compile(r"^\s{2,}\S", re.MULTILINE)
-    _END_PAT = re.compile(
-        r"^(?:REF(?:ERENCE)?S?\s*:|REF\s*:|REFTEL:|RETELS?\s*:|TAGS:|E\.?\s*O\.?\s*\d+:|\n\s*\n)",
-        re.MULTILINE | re.IGNORECASE,
-    )
+    _NEW_REF_RE = re.compile(r"^\s{2,}(?:(?:[A-Z][\).]|\([A-Z]\))\s|[A-Z]\.\s)")
+    _CONT_TEXT_RE = re.compile(r"^\s{2,}\S")
+
+    @staticmethod
+    def _split_refs(text):
+        items = []
+        for part in text.split(";"):
+            for sub in re.split(r"[,:\s]{2,}(?=(?:[A-Z][\).]|\([A-Z]\))\s)", part):
+                sub = sub.strip()
+                if sub:
+                    items.append(sub)
+        return items
 
     def when(self, matches, context):
         mc = matches.named("message_content")
@@ -50,28 +57,31 @@ class ParseRef(Rule):
             return False
 
         start = m.start()
-        first_val = m.group(1).strip()
+        items = self._split_refs(m.group(1))
 
         rest = mc_text[m.end() :]
-        # Look for next REF section or known terminator
-        cont_end = self._END_PAT.search(rest)
-        cont_end_offset = cont_end.start() if cont_end else len(rest)
-        block_text = mc_text[m.end() : m.end() + cont_end_offset]
+        lines = rest.split("\n")
+        end_offset = 0
+        for line in lines:
+            if not line.strip():
+                end_offset += len(line) + 1
+                continue
+            if self._NEW_REF_RE.match(line):
+                items.extend(self._split_refs(line.strip()))
+            elif self._CONT_TEXT_RE.match(line):
+                if items:
+                    combined = items[-1] + " " + line.strip()
+                    items[-1:] = self._split_refs(combined)
+            else:
+                break
+            end_offset += len(line) + 1
 
-        items = [first_val] if first_val else []
-        # Add continuation lines
-        for line in block_text.split("\n"):
-            stripped = line.strip()
-            if stripped:
-                items.append(stripped)
-
-        # If no items and no continuations, use the raw match
         if not items:
             items = [m.group(0).strip()]
 
         return Match(
             mc_start + start,
-            mc_start + m.end() + cont_end_offset,
+            mc_start + m.end() + end_offset,
             value=items,
             name="reference",
             tags=["message_content"],
