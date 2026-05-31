@@ -75,41 +75,15 @@ def _find_ranges(mc_value, text_end, header_matches, input_string):
             if not isinstance(sections, list):
                 continue
             for entry in sections:
-                raw_text = entry.get("raw", "").strip()
-                if not raw_text:
+                raw_text = entry.get("raw", "")
+                if not raw_text.strip():
                     continue
                 start_search = 0
                 while True:
                     pos = mc_value.find(raw_text, start_search)
                     if pos < 0:
                         break
-                    s = pos
-                    e = pos + len(raw_text)
-                    newlines = 0
-                    while s > 0 and (mc_value[s - 1] in "\n\r") and newlines < 2:
-                        if (
-                            mc_value[s - 1] == "\n"
-                            and s > 1
-                            and mc_value[s - 2] == "\r"
-                        ):
-                            s -= 2
-                        else:
-                            s -= 1
-                        newlines += 1
-                    newlines = 0
-                    while (
-                        e < len(mc_value) and (mc_value[e] in "\n\r") and newlines < 2
-                    ):
-                        if (
-                            mc_value[e] == "\r"
-                            and e + 1 < len(mc_value)
-                            and mc_value[e + 1] == "\n"
-                        ):
-                            e += 2
-                        else:
-                            e += 1
-                        newlines += 1
-                    ranges.append((name, s, e))
+                    ranges.append((name, pos, pos + len(raw_text)))
                     start_search = pos + 1
         elif name == "dash_counters":
             raw_text = m.raw

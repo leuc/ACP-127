@@ -20,7 +20,7 @@ def page_break():
     rebulk.defaults(flags=re.MULTILINE)
 
     rebulk.regex(
-        r"^PAGE\s+(?P<page_number>\d+).*$\n{0,2}",
+        r"^PAGE\s+(?P<page_number>\d+).*$\n{0,3}",
         name="page_break",
         tags=["page_break"],
         flags=re.MULTILINE | re.IGNORECASE,

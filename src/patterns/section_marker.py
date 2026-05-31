@@ -15,6 +15,7 @@ from rebulk.remodule import re
 from ..rules.message_content import BuildMessageContent
 
 _CLASSIFICATIONS = [
+    "UNCLAS",
     "UNCLASSIFIED",
     "LIMITED OFFICIAL USE",
     "CONFIDENTIAL",
@@ -38,9 +39,12 @@ def section_marker():
     rebulk = Rebulk()
 
     rebulk.regex(
-        r"^(?P<classification>"
-        + "|".join(_CLASSIFICATIONS)
-        + r")\s+SECTION\s+(?P<section_number>\d+)\s+OF\s+(?P<section_total>\d+)\s+(?P<section_id>.+)$",
+        r"(?P<before_nl>\n{,3})^"
+        r"(?:(?P<classification>" + "|".join(_CLASSIFICATIONS) + r")"
+        r"|(?:" + _spaced_alternation() + r"))"
+        r"\s+SECTION\s+(?P<section_number>\d+)\s+OF\s+(?P<section_total>\d+)\s+"
+        r"(?P<section_id>.+)$"
+        r"(?P<after_nl>\n{,2})",
         name="section_marker",
         tags=["message_content"],
         flags=re.MULTILINE | re.IGNORECASE,
@@ -50,21 +54,8 @@ def section_marker():
             "section_number",
             "section_total",
             "section_id",
-        ],
-    )
-
-    rebulk.regex(
-        r"^(?:"
-        + _spaced_alternation()
-        + r")\s+SECTION\s+(?P<section_number>\d+)\s+OF\s+(?P<section_total>\d+)\s+(?P<section_id>.+)$",
-        name="section_marker",
-        tags=["message_content"],
-        flags=re.MULTILINE,
-        every=True,
-        private_names=[
-            "section_number",
-            "section_total",
-            "section_id",
+            "before_nl",
+            "after_nl",
         ],
     )
 
@@ -100,7 +91,7 @@ class ExtractSectionMarker(Rule):
 
         sections = []
         for m in markers:
-            raw = m.raw.strip()
+            raw = m.raw
             parts = raw.split()
             section_info = {"raw": raw}
             try:
