@@ -23,13 +23,14 @@ class StripPageBreaks(Consequence):
         for m in sorted(pb_matches, key=lambda m: m.start, reverse=True):
             s = m.start - text_end
             e = m.end - text_end
-            m_s = s
-            while s > 0 and raw[s - 1] in "\n\r":
-                s -= 1
-            if s < m_s:
-                s += 1
-            while e < len(raw) and raw[e] in "\n\r":
-                e += 1
+            # Eat up to 2 newlines below (page break's own trailing spacing)
+            newlines = 0
+            while e < len(raw) and (raw[e] in "\n\r") and newlines < 2:
+                if raw[e] == "\r" and e + 1 < len(raw) and raw[e + 1] == "\n":
+                    e += 2
+                else:
+                    e += 1
+                newlines += 1
             ranges.append((s, e))
 
         for old in matches.named("page_break"):

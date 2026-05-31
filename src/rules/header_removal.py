@@ -85,12 +85,30 @@ def _find_ranges(mc_value, text_end, header_matches, input_string):
                         break
                     s = pos
                     e = pos + len(raw_text)
-                    while s > 0 and mc_value[s - 1] in "\n\r":
-                        s -= 1
-                    if s < pos:
-                        s += 1
-                    while e < len(mc_value) and mc_value[e] in "\n\r":
-                        e += 1
+                    newlines = 0
+                    while s > 0 and (mc_value[s - 1] in "\n\r") and newlines < 2:
+                        if (
+                            mc_value[s - 1] == "\n"
+                            and s > 1
+                            and mc_value[s - 2] == "\r"
+                        ):
+                            s -= 2
+                        else:
+                            s -= 1
+                        newlines += 1
+                    newlines = 0
+                    while (
+                        e < len(mc_value) and (mc_value[e] in "\n\r") and newlines < 2
+                    ):
+                        if (
+                            mc_value[e] == "\r"
+                            and e + 1 < len(mc_value)
+                            and mc_value[e + 1] == "\n"
+                        ):
+                            e += 2
+                        else:
+                            e += 1
+                        newlines += 1
                     ranges.append((name, s, e))
                     start_search = pos + 1
         elif name == "dash_counters":

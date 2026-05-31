@@ -26,15 +26,16 @@ class StripClassificationMarkers(Consequence):
         for m in all_matches:
             start = m.start - text_end
             end = m.end - text_end
-            m_start = start
             if start < 0:
                 start = 0
-            while start > 0 and raw[start - 1] in "\n\r":
-                start -= 1
-            if start < m_start:
-                start += 1
-            while end < len(raw) and raw[end] in "\n\r":
-                end += 1
+            # Eat up to 2 newlines below (marker's own trailing spacing)
+            newlines = 0
+            while end < len(raw) and (raw[end] in "\n\r") and newlines < 2:
+                if raw[end] == "\r" and end + 1 < len(raw) and raw[end + 1] == "\n":
+                    end += 2
+                else:
+                    end += 1
+                newlines += 1
             ranges.append((start, end))
 
         for old in matches.named("classification_marker"):
