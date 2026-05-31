@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Multi-stage MRN normalizer for ACP-127 reference data.
+"""MRN normalizer for ACP-127 reference data using rebulk functional pattern.
 
-Reads ``results/197?.reftel.ndjson`` files (pretty-printed JSON objects),
-normalizes each reference string into canonical MRN format using
-rebulk-based multi-stage pattern matching, and outputs NDJSON.
+Reads ``results/197?.reftel.ndjson`` files, normalizes each reference
+string into canonical MRN format using a single rebulk functional pattern
+with O(1) dict-lookup station matching, and outputs NDJSON.
 
-Usage::
+    Usage::
 
-    python3 src/reftel-normalize.py [results/197?.reftel.ndjson ...] > all-mrns.ndjson
+        python3 -m src.reftel_normalize [results/197?.reftel.ndjson ...] > all-mrns.ndjson
 
 Output format (one JSON line per document)::
 
@@ -21,14 +21,16 @@ import json
 import os
 import re
 import sys
-from collections import Counter
-from dataclasses import dataclass, field
+from collections import Counter, defaultdict
 from datetime import datetime
 
 from rebulk import Rebulk
 
-from station_data import _VARIANT_TO_TARGET
-from station_index import StationIndex
+_src_dir = os.path.dirname(os.path.abspath(__file__))
+if _src_dir not in sys.path:
+    sys.path.insert(0, _src_dir)
+
+from station_data import STATIONS, _VARIANT_TO_TARGET
 
 # ── Pre-processing constants ────────────────────────────────────────────────
 
@@ -42,129 +44,83 @@ _POSSESSIVE = re.compile(r"\b' S\s+")
 _AIRGRAM_STRIP = re.compile(r"\bAIRGRAM\s+", re.I)
 _NA_RE = re.compile(r"^(?:\s*n/a\s*|\s*N/A\s*|\s*none\s*)$", re.I)
 _4DIGIT_YEAR = re.compile(r"\b(?P<y>\d{4})(?P<rest>[A-Z])")
+_RETENTION_STRIP = re.compile(r"\n\s*Retention:\s*\d+\s*$")
 _DATE_FORMATS = [
     "%d %b %Y",
     "%d-%b-%Y %I:%M:%S %p",
     "%d-%b-%Y",
 ]
 
-_MIN_STATION_LEN = 3
-_TOP_FAILED = 20
+_TOP_FAILED = 500
 
+# ── Station lookup (O(1), no regex alternation) ────────────────────────────
 
-@dataclass
-class StageDef:
-    name: str
-    regex_template: str
-    is_airgram: bool
-    priority: int
+_STATIONS: dict[str, str] = {}
+for canon in STATIONS:
+    _STATIONS[canon.upper()] = canon
+for variant, canon in _VARIANT_TO_TARGET.items():
+    _STATIONS[variant.upper()] = canon
 
+_STOP_STATIONS = frozenset(
+    s.upper()
+    for s in [
+        "DATED",
+        "DATE",
+        "NUMBER",
+        "NBR",
+        "REFERENCE",
+        "REF",
+        "REFTEL",
+        "PAGE",
+        "PAGES",
+        "SECTION",
+        "CLASSIFIED",
+        "UNCLASSIFIED",
+        "SECRET",
+        "CONFIDENTIAL",
+        "SENSITIVE",
+        "NOTAL",
+        "EXDIS",
+        "NODIS",
+        "STADIS",
+        "PART",
+        "SECT",
+        "ITEM",
+        "NOTE",
+        "JANUARY",
+        "FEBRUARY",
+        "MARCH",
+        "APRIL",
+        "MAY",
+        "JUNE",
+        "JULY",
+        "AUGUST",
+        "SEPTEMBER",
+        "OCTOBER",
+        "NOVEMBER",
+        "DECEMBER",
+        "JAN",
+        "FEB",
+        "MAR",
+        "APR",
+        "JUN",
+        "JUL",
+        "AUG",
+        "SEP",
+        "OCT",
+        "NOV",
+        "DEC",
+        "MONDAY",
+        "TUESDAY",
+        "WEDNESDAY",
+        "THURSDAY",
+        "FRIDAY",
+        "SATURDAY",
+        "SUNDAY",
+    ]
+)
 
-_STAGES: list[StageDef] = [
-    # ── Airgram stages (higher priority) ────────────────────────────────
-    StageDef(
-        "airgram_spaced_known",
-        r"\b(?P<year>\d{{2}})\s+(?P<station>{stations})\s+A-?(?P<number>\d{{1,10}})\b",
-        is_airgram=True,
-        priority=1400,
-    ),
-    StageDef(
-        "airgram_compact_known",
-        r"\b(?P<year>\d{{2}})(?P<station>{stations})A-?(?P<number>\d{{1,10}})\b",
-        is_airgram=True,
-        priority=1300,
-    ),
-    StageDef(
-        "airgram_A_prefix",
-        r"\b(?P<year>\d{{2}})[A-Z]:(?P<station>{stations})\s*A-?(?P<number>\d{{1,10}})\b",
-        is_airgram=True,
-        priority=1200,
-    ),
-    StageDef(
-        "airgram_spaced_generic",
-        r"\b(?P<year>\d{{2}})\s+(?P<station>[A-Z]{{3,}}(?:\s+[A-Z]{{3,}})*)\s+A-?(?P<number>\d{{1,10}})\b",
-        is_airgram=True,
-        priority=1150,
-    ),
-    StageDef(
-        "airgram_compact_generic_80",
-        r"\b(?P<year>\d{{2}})(?P<station>[A-Z]{{4,80}})A-?(?P<number>\d{{1,10}})\b",
-        is_airgram=True,
-        priority=1140,
-    ),
-    StageDef(
-        "airgram_mixed_case_generic",
-        r"\b(?P<year>\d{{2}})(?P<station>[A-Za-z]{{4,80}})A-?(?P<number>\d{{1,10}})\b",
-        is_airgram=True,
-        priority=1130,
-    ),
-    StageDef(
-        "airgram_fallback",
-        r"\b(?P<station>{stations})\s+A-?\s*(?P<number>\d{{1,10}})\b",
-        is_airgram=True,
-        priority=1100,
-    ),
-    StageDef(
-        "airgram_fallback_compact",
-        r"\b(?P<station>{stations})A\s+(?P<number>\d{{1,10}})\b",
-        is_airgram=True,
-        priority=1085,
-    ),
-    # ── Cable stages ────────────────────────────────────────────────────
-    StageDef(
-        "cable_spaced_known",
-        r"\b(?P<year>\d{{2}})\s+(?P<station>{stations})\s+(?P<number>\d{{1,10}})\b",
-        is_airgram=False,
-        priority=1000,
-    ),
-    StageDef(
-        "cable_A_prefix",
-        r"\b(?P<year>\d{{2}})[A-Z]:(?P<station>{stations})\s*(?P<number>\d{{1,10}})\b",
-        is_airgram=False,
-        priority=950,
-    ),
-    StageDef(
-        "cable_compact_known",
-        r"\b(?P<year>\d{{2}})(?P<station>{stations})\s*(?P<number>\d{{1,10}})\b",
-        is_airgram=False,
-        priority=900,
-    ),
-    StageDef(
-        "cable_spaced_generic",
-        r"\b(?P<year>\d{{2}})\s+(?P<station>[A-Z]{{3,}}(?:\s+[A-Z]{{3,}})*)\s+(?P<number>\d{{1,10}})\b",
-        is_airgram=False,
-        priority=850,
-    ),
-    StageDef(
-        "cable_compact_uppercase",
-        r"\b(?P<year>\d{{2}})(?P<station>[A-Z]{{4,80}})\s*(?P<number>\d{{1,10}})\b",
-        is_airgram=False,
-        priority=800,
-    ),
-    StageDef(
-        "cable_mixed_case",
-        r"\b(?P<year>\d{{2}})(?P<station>[A-Za-z]{{4,80}})\s*(?P<number>\d{{1,10}})\b",
-        is_airgram=False,
-        priority=750,
-    ),
-    StageDef(
-        "cable_fallback",
-        r"\b(?P<station>{stations})\s+(?P<number>\d{{1,10}})\b",
-        is_airgram=False,
-        priority=700,
-    ),
-    StageDef(
-        "cable_fallback_compact",
-        r"\b(?P<station>{stations})(?P<number>\d{{4,10}})\b",
-        is_airgram=False,
-        priority=650,
-    ),
-]
-
-
-def _extract_groups(match):
-    """Extract named groups from a rebulk Match as a plain dict."""
-    return {c.name: c.value for c in match.children}
+# ── Utility functions ──────────────────────────────────────────────────────
 
 
 def _clean_year(y: str) -> str:
@@ -193,11 +149,6 @@ def _format_canonical(year: str, station: str, number: str, is_airgram: bool) ->
 
 
 def _preprocess(ref: str) -> str | None:
-    """Clean a reference string before matching.
-
-    Returns cleaned string or None if the reference should be skipped
-    (null, NA, empty).
-    """
     if not ref:
         return None
     text = ref.strip()
@@ -205,7 +156,6 @@ def _preprocess(ref: str) -> str | None:
         return None
     if _NA_RE.match(text):
         return None
-
     text = _PREFIX_STRIP.sub("", text).strip()
     text = _NOTAL_CLEAN.sub("", text).strip()
     text = _UNCLAS.sub("", text).strip()
@@ -216,91 +166,182 @@ def _preprocess(ref: str) -> str | None:
     return text.strip() or None
 
 
-def _normalize_doc_number(
-    doc_number: str, station_index: StationIndex, rebulk: Rebulk
-) -> str | None:
-    cleaned = _preprocess(doc_number)
-    if not cleaned:
+def _preprocess_attr(attr_ref: str) -> str | None:
+    """Preprocess an attr_reference string (single ref, no splitting)."""
+    if not attr_ref:
         return None
-    matches = rebulk.matches(cleaned)
-    for stage in _STAGES:
-        for m in matches.named(stage.name):
-            groups = _extract_groups(m)
-            raw_station = groups.get("station", "").strip()
-            raw_number = groups.get("number", "").strip()
-            if not raw_station or not raw_number:
-                continue
-            if len(raw_station) < _MIN_STATION_LEN:
-                continue
-            if station_index.is_stop_station(raw_station):
-                continue
-            if stage.name == "airgram_fallback_compact":
-                if (
-                    station_index.resolve(raw_station + "A", allow_fuzzy=False)
-                    is not None
-                ):
-                    continue
-            canonical = station_index.resolve(
-                raw_station, allow_fuzzy=not stage.is_airgram
+    text = attr_ref.strip()
+    if not text:
+        return None
+    if _NA_RE.match(text):
+        return None
+    text = _RETENTION_STRIP.sub("", text)
+    text = text.strip()
+    if not text:
+        return None
+    return _preprocess(text)
+
+
+# ── MRN parsing (no regex station matching) ────────────────────────────────
+
+
+def _parse_single_ref(text: str, doc_year: str) -> tuple[str, bool] | None:
+    """Parse a cleaned reference string into (mrn, is_airgram)."""
+    tlen = len(text)
+    if tlen < 4:
+        return None
+
+    year = ""
+    idx = 0
+    if tlen >= 2 and text[0:2].isdigit():
+        if tlen == 2 or not text[2].isdigit():
+            year = text[0:2]
+            idx = 2
+            while idx < tlen and text[idx] in " \t":
+                idx += 1
+
+    if not year:
+        year = doc_year
+
+    num_end = tlen
+    while num_end > 0 and not text[num_end - 1].isdigit():
+        num_end -= 1
+    if num_end == 0:
+        return None
+    num_start = num_end
+    while (
+        num_start > 0 and text[num_start - 1].isdigit() and (num_end - num_start) < 10
+    ):
+        num_start -= 1
+    if num_end - num_start < 1:
+        return None
+
+    raw_number = text[num_start:num_end]
+
+    is_airgram = False
+    station_end = num_start
+    if station_end >= 2 and text[station_end - 1] == "-":
+        station_end -= 1
+        if station_end >= 1 and text[station_end - 1].upper() == "A":
+            station_end -= 1
+            is_airgram = True
+    elif station_end >= 1 and text[station_end - 1].upper() == "A":
+        if station_end >= 2 and text[station_end - 2] in " \t":
+            station_end -= 1
+            is_airgram = True
+
+    raw_station = text[idx:station_end].strip()
+    while raw_station and not raw_station[-1].isalpha():
+        raw_station = raw_station[:-1]
+    if not raw_station or len(raw_station) < 3:
+        return None
+    if not all(c.isalpha() or c in " \t" for c in raw_station):
+        return None
+
+    raw_station_upper = raw_station.upper()
+
+    if raw_station_upper in _STOP_STATIONS:
+        return None
+
+    canonical = _STATIONS.get(raw_station_upper)
+    if canonical is None:
+        return None
+
+    number = _clean_number(raw_number)
+    mrn = _format_canonical(year, canonical, number, is_airgram)
+    return (mrn, is_airgram)
+
+
+# ── Rebulk functional pattern ──────────────────────────────────────────────
+
+
+def _batch_match(input_string: str, context: dict) -> list[dict] | None:
+    """Rebulk functional pattern: extract MRNs from batched ref strings.
+
+    Each line in the batch has format::
+
+        doc_idx<tab>doc_year<tab>single_ref_text
+
+    Each line represents exactly one pre-split reference.
+    """
+    results = []
+    for raw_line in input_string.split("\n"):
+        stripped = raw_line.strip()
+        if not stripped:
+            continue
+        parts = stripped.split("\t", 2)
+        if len(parts) < 3:
+            continue
+        doc_idx, doc_year, text = parts[0], parts[1], parts[2]
+
+        text = _NOTAL_CLEAN.sub("", text).strip()
+        if not text:
+            continue
+        result = _parse_single_ref(text, doc_year)
+        if result:
+            mrn, is_airgram = result
+            results.append(
+                {
+                    "start": 0,
+                    "end": 1,
+                    "name": "mrn",
+                    "value": mrn,
+                    "tags": [
+                        f"doc={doc_idx}",
+                        "airgram" if is_airgram else "cable",
+                    ],
+                }
             )
-            if not canonical:
-                continue
-            year = groups.get("year", "")
-            year = _clean_year(year) if year else ""
-            number = _clean_number(raw_number)
-            return _format_canonical(year, canonical, number, stage.is_airgram)
-    return None
+        elif context and "_failed_refs" in context:
+            context["_failed_refs"].append(text[:120])
+    return results if results else None
 
 
-def _build_rebulk(station_index: StationIndex) -> Rebulk:
-    r = Rebulk()
-    stations_alt = station_index.alternation_pattern()
-    for stage in _STAGES:
-        pattern = stage.regex_template.format(stations=stations_alt)
-        r.regex(
-            pattern,
-            name=stage.name,
-            priority=stage.priority,
-            tags=["reference_stage"],
-            flags=re.IGNORECASE,
-        )
+def _build_rebulk() -> Rebulk:
+    r = Rebulk(default_rules=False)
+    r.functional(_batch_match, name="mrn", properties={"mrn": [None]})
     return r
 
 
+# ── Document number normalization (simple regex, no rebulk) ────────────────
+
+_RE_DOC_NUMBER = re.compile(r"(?P<year>\d{2})(?P<station>[A-Z]{3,80})0*(?P<number>\d+)")
+
+
+def _normalize_doc_number(doc_number: str) -> str | None:
+    if not doc_number:
+        return None
+    cleaned = _preprocess(doc_number)
+    if not cleaned:
+        return None
+    m = _RE_DOC_NUMBER.search(cleaned)
+    if not m:
+        return None
+    raw_station = m.group("station")
+    canonical = _STATIONS.get(raw_station.upper())
+    if not canonical:
+        return None
+    year = _clean_year(m.group("year"))
+    number = _clean_number(m.group("number"))
+    return f"{year}{canonical}{number}"
+
+
+# ── Coverage tracking ──────────────────────────────────────────────────────
+
+
 class CoverageTracker:
-    """Tracks normalization coverage per-stage and collects failure samples."""
+    """Tracks normalization coverage and collects failure samples."""
 
     def __init__(self):
         self.total_docs = 0
         self.total_refs = 0
-        self.stage_counts: Counter = Counter()
+        self.matched_refs = 0
+        self.skipped_docs = 0
         self.failed_refs: list[str] = []
-        self.station_exact_variant = 0
-        self.station_exact_joined = 0
-        self.station_fuzzy = 0
-        self.station_failed = 0
-        # Per-document tracking
+        self.cable_count = 0
+        self.airgram_count = 0
         self.docs_with_refs = 0
         self.docs_with_matches = 0
-
-    def record_ref(self, stage: str | None, ref_text: str):
-        self.total_refs += 1
-        if stage:
-            self.stage_counts[stage] += 1
-        else:
-            self.stage_counts["failed"] += 1
-            if len(self.failed_refs) < _TOP_FAILED:
-                self.failed_refs.append(ref_text[:120])
-
-    def record_station_resolution(self, result: str):
-        if result == "exact_variant":
-            self.station_exact_variant += 1
-        elif result == "exact_joined":
-            self.station_exact_joined += 1
-        elif result == "fuzzy":
-            self.station_fuzzy += 1
-        elif result == "failed":
-            self.station_failed += 1
 
     def record_doc(self, ref_count: int, match_count: int):
         self.total_docs += 1
@@ -308,6 +349,19 @@ class CoverageTracker:
             self.docs_with_refs += 1
         if match_count > 0:
             self.docs_with_matches += 1
+
+    def record_refs(
+        self, total: int, matched: int, skipped_docs: int, cables: int, airgrams: int
+    ):
+        self.total_refs += total
+        self.matched_refs += matched
+        self.skipped_docs += skipped_docs
+        self.cable_count += cables
+        self.airgram_count += airgrams
+
+    def record_failed(self, ref_text: str):
+        if len(self.failed_refs) < _TOP_FAILED:
+            self.failed_refs.append(ref_text[:120])
 
     def print_report(self, source_files: list[str], output_path: str | None):
         def pct(n):
@@ -326,46 +380,21 @@ class CoverageTracker:
         sys.stderr.write(
             f"  with matches:          {self.docs_with_matches:,}  ({pct_doc(self.docs_with_matches):.2f}%)\n"
         )
-        sys.stderr.write(f"Total ref strings:       {self.total_refs:,}\n")
-        sys.stderr.write("\n")
-
-        sys.stderr.write("Per-stage match rates:\n")
-        for stage in _STAGES:
-            cnt = self.stage_counts.get(stage.name, 0)
-            sys.stderr.write(f"  {stage.name:40s} {cnt:>8,}  ({pct(cnt):.2f}%)\n")
-
-        cnt = self.stage_counts.get("skipped", 0)
-        sys.stderr.write(f"  {'skipped (null/NA)':40s} {cnt:>8,}  ({pct(cnt):.2f}%)\n")
-        cnt = self.stage_counts.get("failed", 0)
-        sys.stderr.write(f"  {'failed (no match)':40s} {cnt:>8,}  ({pct(cnt):.2f}%)\n")
-        sys.stderr.write("\n")
-
-        sys.stderr.write("Station resolution:\n")
-        total_station = (
-            self.station_exact_variant
-            + self.station_exact_joined
-            + self.station_fuzzy
-            + self.station_failed
+        sys.stderr.write(
+            f"  no ref (null/NA):      {self.skipped_docs:,}  ({pct_doc(self.skipped_docs):.2f}%)\n"
         )
-        if total_station:
-
-            def spct(n):
-                return n / total_station * 100
-
-            sys.stderr.write(
-                f"  exact (variant dict):  {self.station_exact_variant:>10,}  ({spct(self.station_exact_variant):.2f}%)\n"
-            )
-            sys.stderr.write(
-                f"  exact (joined multi):  {self.station_exact_joined:>10,}  ({spct(self.station_exact_joined):.2f}%)\n"
-            )
-            sys.stderr.write(
-                f"  fuzzy (Levenshtein):   {self.station_fuzzy:>10,}  ({spct(self.station_fuzzy):.2f}%)\n"
-            )
-            sys.stderr.write(
-                f"  failed to resolve:     {self.station_failed:>10,}  ({spct(self.station_failed):.2f}%)\n"
-            )
-        else:
-            sys.stderr.write("  (no station resolutions tracked)\n")
+        sys.stderr.write(f"Total ref parts:         {self.total_refs:,}\n")
+        sys.stderr.write(
+            f"  matched:               {self.matched_refs:,}  ({pct(self.matched_refs):.2f}%)\n"
+        )
+        failed = self.total_refs - self.matched_refs
+        sys.stderr.write(f"  failed (no match):     {failed:,}  ({pct(failed):.2f}%)\n")
+        sys.stderr.write(
+            f"  cables:                {self.cable_count:,}  ({pct(self.cable_count):.2f}%)\n"
+        )
+        sys.stderr.write(
+            f"  airgrams:              {self.airgram_count:,}  ({pct(self.airgram_count):.2f}%)\n"
+        )
 
         if self.failed_refs:
             sys.stderr.write(
@@ -375,8 +404,15 @@ class CoverageTracker:
                 sys.stderr.write(f"  {i + 1:>6,}  {fr!r}\n")
 
 
+# ── Input reading ──────────────────────────────────────────────────────────
+
+
 def read_reftel(path: str):
-    """Yield (doc_number, date, refs_list) from a .reftel.ndjson file (one JSON object per line)."""
+    """Yield (doc_number, date, attr_reference, ref_list) from a .reftel.ndjson file.
+
+    ``ref_list`` is the pre-split ``reference`` field (list of strings, or None).
+    ``attr_reference`` is the raw attribute string (fallback).
+    """
     with open(path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -388,9 +424,12 @@ def read_reftel(path: str):
                 continue
             doc = obj.get("document_number") or ""
             date = obj.get("date") or ""
-            refs = obj.get("references") or []
-            if isinstance(refs, list):
-                yield doc, date, refs
+            attr_ref = obj.get("attr_reference") or ""
+            ref_list = obj.get("reference")
+            yield doc, date, attr_ref, ref_list
+
+
+# ── Main ───────────────────────────────────────────────────────────────────
 
 
 def main():
@@ -418,93 +457,105 @@ def main():
     else:
         out = sys.stdout
 
-    station_index = StationIndex()
-    rebulk = _build_rebulk(station_index)
+    rebulk = _build_rebulk()
     coverage = CoverageTracker()
 
     for path in paths:
         sys.stderr.write(f"Processing {path} ...\n")
-        for doc_number, doc_date, refs in read_reftel(path):
+
+        docs: list[tuple[str, str]] = []
+        batch_lines: list[str] = []
+        batch_ref_counts: list[int] = []
+
+        for doc_number, doc_date, attr_ref, ref_list in read_reftel(path):
+            doc_idx = len(docs)
+            docs.append((doc_number, doc_date))
+
             doc_year = _extract_year_from_date(doc_date)
-            normalized = []
-            for ref_text in refs:
-                cleaned = _preprocess(str(ref_text)) if ref_text else None
-                if not cleaned:
-                    coverage.record_ref("skipped", ref_text or "")
+
+            if ref_list and isinstance(ref_list, list):
+                cleaned = [_preprocess(str(r)) for r in ref_list]
+                cleaned = [c for c in cleaned if c]
+                if cleaned:
+                    for c in cleaned:
+                        batch_lines.append(f"{doc_idx}\t{doc_year}\t{c}")
+                    batch_ref_counts.append(len(cleaned))
                     continue
 
-                matches = rebulk.matches(cleaned)
-                matched = False
-                for stage in _STAGES:
-                    for m in matches.named(stage.name):
-                        groups = _extract_groups(m)
-                        raw_station = groups.get("station", "").strip()
-                        raw_number = groups.get("number", "").strip()
+            cleaned = _preprocess_attr(attr_ref)
+            if cleaned:
+                batch_lines.append(f"{doc_idx}\t{doc_year}\t{cleaned}")
+                batch_ref_counts.append(1)
+            else:
+                batch_ref_counts.append(0)
 
-                        if not raw_station or not raw_number:
-                            continue
-                        if len(raw_station) < _MIN_STATION_LEN:
-                            continue
-                        if station_index.is_stop_station(raw_station):
-                            continue
+        failed_refs: list[str] = []
 
-                        # airgram_fallback_compact: reject if raw_station+"A"
-                        # is itself a known station (would be false positive)
-                        if stage.name == "airgram_fallback_compact":
-                            if (
-                                station_index.resolve(
-                                    raw_station + "A", allow_fuzzy=False
-                                )
-                                is not None
-                            ):
-                                continue
+        if batch_lines:
+            batch_text = "\n".join(batch_lines)
+            context = {"_failed_refs": failed_refs}
+            all_matches = rebulk.matches(batch_text, context=context)
 
-                        canonical_station = station_index.resolve(
-                            raw_station,
-                            allow_fuzzy=not stage.is_airgram,
-                        )
-                        if canonical_station is None:
-                            coverage.record_station_resolution("failed")
-                            continue
+            # Group matches by document index
+            doc_mrns: dict[int, list[str]] = defaultdict(list)
+            doc_cables: dict[int, int] = defaultdict(int)
+            doc_airgrams: dict[int, int] = defaultdict(int)
+            for m in all_matches:
+                doc_idx = -1
+                for tag in m.tags:
+                    if tag.startswith("doc="):
+                        doc_idx = int(tag[4:])
+                    elif tag == "cable":
+                        doc_cables[doc_idx] += 1
+                    elif tag == "airgram":
+                        doc_airgrams[doc_idx] += 1
+                if doc_idx >= 0:
+                    doc_mrns[doc_idx].append(m.value)
+        else:
+            doc_mrns = {}
+            doc_cables = {}
+            doc_airgrams = {}
 
-                        # Track station resolution method
-                        norm_station = raw_station.strip().upper()
-                        if norm_station in station_index._canonical_set:
-                            coverage.record_station_resolution("exact_joined")
-                        elif norm_station in _VARIANT_TO_TARGET:
-                            coverage.record_station_resolution("exact_variant")
-                        else:
-                            coverage.record_station_resolution("fuzzy")
+        # Output per document
+        total_ref_parts = 0
+        total_matched = 0
+        total_skipped_docs = 0
+        total_cables = 0
+        total_airgrams = 0
 
-                        year = groups.get("year", doc_year)
-                        if not year:
-                            year = doc_year
-                        year = _clean_year(year)
-                        number = _clean_number(raw_number)
+        for i, (doc_number, doc_date) in enumerate(docs):
+            normalized = doc_mrns.get(i, [])
+            ref_parts = batch_ref_counts[i]
 
-                        mrn = _format_canonical(
-                            year, canonical_station, number, stage.is_airgram
-                        )
-                        normalized.append(mrn)
-                        coverage.record_ref(stage.name, ref_text)
-                        matched = True
-                        break
+            if ref_parts > 0:
+                total_ref_parts += ref_parts
+            else:
+                total_skipped_docs += 1
 
-                    if matched:
-                        break
+            total_matched += len(normalized)
+            total_cables += doc_cables.get(i, 0)
+            total_airgrams += doc_airgrams.get(i, 0)
 
-                if not matched:
-                    coverage.record_ref(None, ref_text)
+            coverage.record_doc(ref_parts, len(normalized))
 
-            coverage.record_doc(len(refs), len(normalized))
-
-            doc_number_norm = _normalize_doc_number(doc_number, station_index, rebulk)
+            doc_number_norm = _normalize_doc_number(doc_number)
             result = {
                 "document_number": doc_number_norm or doc_number,
                 "date": doc_date,
                 "extracted_references": normalized if normalized else None,
             }
             out.write(json.dumps(result, ensure_ascii=False) + "\n")
+
+        for fr in failed_refs:
+            coverage.record_failed(fr)
+
+        coverage.record_refs(
+            total_ref_parts,
+            total_matched,
+            total_skipped_docs,
+            total_cables,
+            total_airgrams,
+        )
 
     if out is not sys.stdout:
         out.close()
