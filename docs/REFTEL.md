@@ -1,5 +1,42 @@
 # MRN / Reference Extraction
 
+# ── Reference / MRN extraction patterns ───────────────────────────────────────
+
+```python
+RE_CABLE_S1_A = re.compile(
+    r"\b(?P<year>\d{2})[A-Z]:(?P<station>"
+    + STATION_PATTERN
+    + r")(?:'S)?\s*(?P<number>\d{1,10})\b",
+    re.I,
+)
+RE_CABLE_S1_C = re.compile(
+    r"\b(?P<year>\d{2})\s*(?P<station>"
+    + STATION_PATTERN
+    + r")(?:'S)?\s*(?P<number>\d{1,10})\b",
+    re.I,
+)
+RE_CABLE_FALLBACK = re.compile(
+    r"\b(?P<station>" + STATION_PATTERN + r")(?:'S)?\s*(?P<number>\d{1,10})\b",
+    re.I,
+)
+
+RE_AIRGRAM_COMPACT = re.compile(
+    r"\b(?P<year>\d{2})(?P<station>" + STATION_PATTERN + r")A-?(?P<number>\d{1,10})\b",
+    re.I,
+)
+RE_AIRGRAM_SPACED = re.compile(
+    r"\b(?P<year>\d{2})\s*(?P<station>"
+    + STATION_PATTERN
+    + r")\s+A-?(?P<number>\d{1,10})\b",
+    re.I,
+)
+RE_AIRGRAM_FALLBACK = re.compile(
+    r"\b(?P<station>" + STATION_PATTERN + r")\s+A-?(?P<number>\d{1,10})\b",
+    re.I,
+)
+
+RE_DOC_NUMBER = re.compile(r"(?P<year>\d{2})(?P<station>[A-Z]+)0*(?P<number>\d+)")
+```
 
 ## MRN Format
 

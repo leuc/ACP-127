@@ -51,6 +51,7 @@ _KEYS = [
     "Previous Channel Indicators",
     "Previous Handling Restrictions",
     "Reference",
+    "Retention",
     "Review Action",
     "Review Authority",
     "Review Comment",

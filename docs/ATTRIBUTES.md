@@ -937,6 +937,9 @@ If an attribute has more than 30 unique values, the top 15 and bottom 15 are sho
          1 Reference: 75 BANGUI 1345
          1 Reference: 75 LA PAZ 6318
 ---
+# Retention
+  (values appear after extraction with this key added)
+---
 # Review Action
    2081241 Review Action: RELEASED, APPROVED
         17 Review Action: RELEASED, APPROVED, APPROVED, APPROVED
