@@ -23,6 +23,7 @@ import re
 import sys
 from collections import Counter
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from rebulk import Rebulk
 
@@ -38,8 +39,14 @@ _LETTER_PREFIX = re.compile(r"^\s*(?:\(\s*[A-Z]\s*\)\s*|[A-Z]\.\s*|[A-Z]\)\s*)+"
 _NOTAL_CLEAN = re.compile(r"\s*\(?\s*NOTAL\b\s*\)?\s*", re.I)
 _UNCLAS = re.compile(r"\bUNCLAS\s+", re.I)
 _POSSESSIVE = re.compile(r"\b' S\s+")
+_AIRGRAM_STRIP = re.compile(r"\bAIRGRAM\s+", re.I)
 _NA_RE = re.compile(r"^(?:\s*n/a\s*|\s*N/A\s*|\s*none\s*)$", re.I)
 _4DIGIT_YEAR = re.compile(r"\b(?P<y>\d{4})(?P<rest>[A-Z])")
+_DATE_FORMATS = [
+    "%d %b %Y",
+    "%d-%b-%Y %I:%M:%S %p",
+    "%d-%b-%Y",
+]
 
 _MIN_STATION_LEN = 3
 _TOP_FAILED = 20
@@ -146,6 +153,12 @@ _STAGES: list[StageDef] = [
         is_airgram=False,
         priority=700,
     ),
+    StageDef(
+        "cable_fallback_compact",
+        r"\b(?P<station>{stations})(?P<number>\d{{4,10}})\b",
+        is_airgram=False,
+        priority=650,
+    ),
 ]
 
 
@@ -156,6 +169,16 @@ def _extract_groups(match):
 
 def _clean_year(y: str) -> str:
     return y[-2:]
+
+
+def _extract_year_from_date(date_str: str) -> str:
+    text = date_str.strip()
+    for fmt in _DATE_FORMATS:
+        try:
+            return datetime.strptime(text, fmt).strftime("%y")
+        except ValueError:
+            continue
+    return ""
 
 
 def _clean_number(n: str) -> str:
@@ -188,6 +211,7 @@ def _preprocess(ref: str) -> str | None:
     text = _UNCLAS.sub("", text).strip()
     text = _LETTER_PREFIX.sub("", text).strip()
     text = _POSSESSIVE.sub(" ", text)
+    text = _AIRGRAM_STRIP.sub("", text).strip()
     text = _4DIGIT_YEAR.sub(lambda m: m.group("y")[2:] + m.group("rest"), text)
     return text.strip() or None
 
@@ -401,7 +425,7 @@ def main():
     for path in paths:
         sys.stderr.write(f"Processing {path} ...\n")
         for doc_number, doc_date, refs in read_reftel(path):
-            doc_year = doc_number[2:4] if len(doc_number) >= 4 else ""
+            doc_year = _extract_year_from_date(doc_date)
             normalized = []
             for ref_text in refs:
                 cleaned = _preprocess(str(ref_text)) if ref_text else None

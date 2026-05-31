@@ -17,12 +17,15 @@ STATIONS = {
     "ABIDJAN": [
         "ABIDJAN",
         "ABIDJDAN",
+        "ABIAJDN",
+        "A IDJAN",
     ],
     "ABUDHABI": [
         "ABU DHABI",
         "ABUDHABI",
         "ABUDH",
         "BUDH",
+        "ADU DHABI",
     ],
     "ABUJA": [
         "ABUJA",
@@ -38,6 +41,7 @@ STATIONS = {
     ],
     "ADDIS": [
         "ADDIS",
+        "ADIS",
     ],
     "ADDISABABA": [
         "ADDIS ABABA",
@@ -178,6 +182,7 @@ STATIONS = {
     ],
     "BARCELONA": [
         "BARCELONA",
+        "BACELONA",
     ],
     "BARRAN": [
         "BARRAN",
@@ -1183,6 +1188,7 @@ STATIONS = {
     ],
     "NOUAKCHOTT": [
         "NOUACKCHOTT",
+        "NOUACKHOCTT",
         "NOUAKCHOTT",
         "NOUAKC",
         "OUAKC",
