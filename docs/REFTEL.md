@@ -20,8 +20,13 @@ Airgram variant: `YYSTATION-ANNNNN` (e.g. `73BANGKOK-A50`).
 
 ### Pipeline
 
-1. **Read** per-year NDJSON files (e.g. `1973.reftel.ndjson`) — yields `(doc_number, date, attr_ref, ref_list)`
-2. **Prefer** `ref_list` (pre-split `reference` field) over raw `attr_reference` string
+1. **Extract** structured JSON from ACP-127 messages via `src.extractor`
+2. **Flatten** to reftel NDJSON:
+
+        jq -Mc '{"references": ._reference, "attr_reference": ."Message Attributes"."Reference", "document_number": ."Message Attributes"."Document Number", "date": ."Message Attributes"."Draft Date" // ."Message Attributes"."Sent Date"}' input.ndjson > year.reftel.ndjson
+
+3. **Read** per-year NDJSON files — yields `(doc_number, date, attr_ref, ref_list)`
+4. **Prefer** `ref_list` (pre-split `references` field) over raw `attr_reference` string
 3. **Clean** each ref string:
    - Strip `REF:/REFTEL:/RETELS:` prefix
    - Strip `NOTAL`, `UNCLAS`
@@ -53,24 +58,25 @@ The normalizer does **no splitting** of multi-ref strings. Each ref enters `_par
 
 | Year | Docs | Refs | Matched | Rate | Time |
 |---|---|---|---|---|---|
-| 1973 | 155,278 | 94,515 | 58,973 | 62.4% | 2.96s |
-| 1974 | 239,348 | 148,589 | 97,256 | 65.5% | — |
-| 1975 | 275,335 | 168,064 | 113,932 | 67.8% | — |
-| 1976 | 288,088 | 172,145 | 118,507 | 68.8% | — |
-| 1977 | 296,299 | 175,218 | 121,230 | 69.2% | — |
-| 1978 | 304,641 | 176,060 | 121,846 | 69.2% | — |
-| 1979 | 522,283 | 293,443 | 195,863 | 66.7% | — |
-| **Total** | **2,081,272** | **1,228,034** | **827,607** | **67.4%** | **43.0s** |
+| 1973 | 155,278 | 210,904 | 156,091 | 74.0% | 7.2s |
+| 1974 | 239,348 | 236,280 | 181,294 | 76.7% | — |
+| 1975 | 275,335 | 266,178 | 207,490 | 78.0% | — |
+| 1976 | 288,088 | 232,871 | 180,691 | 77.6% | — |
+| 1977 | 296,299 | 243,413 | 189,847 | 78.0% | — |
+| 1978 | 304,641 | 231,370 | 181,697 | 78.5% | — |
+| 1979 | 522,283 | 252,831 | 179,372 | 70.9% | — |
+| **Total** | **2,081,272** | **1,673,847** | **1,276,482** | **76.3%** | **51.0s** |
 
-## Failure Categories (400,427 total)
+## Failure Categories (397,365 total)
 
 | Category | Share | Example |
 |---|---|---|
-| Multi-ref with commas | ~75% | `STATE 093410, B.STATE 105386` |
-| Sender-date format | ~5% | `USCINCRED 311345 Z MAY 73` |
-| Non-station sender codes | ~5% | `EMBTEL`, `IAEA VIENNA`, `EC BRUSSELS` |
-| `AND` / `;` / letter-dot separators | ~5% | `73 STATE 115778 AND COPENHAGEN 130` |
-| Genuine garbage | ~5% | `PARA 2`, `MILLS LETTER TO BLAKE MAY 25` |
+| Multi-ref with commas | ~25% | `STATE 093410, B.STATE 105386` |
+| Sender-date format | ~15% | `USCINCRED 311345 Z MAY 73` |
+| Non-station sender codes | ~15% | `EMBTEL`, `IAEA VIENNA`, `EC BRUSSELS`, `BA` |
+| Standalone numbers / fragments | ~10% | `3164`, `125535`, `115785` |
+| `AND` / `;` / letter-dot separators | ~10% | `STATE 115778 AND COPENHAGEN 130` |
+| Genuine garbage | ~10% | `PARA 2`, `MILLS LETTER TO BLAKE MAY 25` |
 | OCR issues | ~5% | `73 STATE 1 O1684`, `73 STATE 2118984` |
 
 ## Usage

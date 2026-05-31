@@ -11,8 +11,8 @@ with O(1) dict-lookup station matching, and outputs NDJSON.
 
     Output format (one JSON line per document)::
 
-    {"document_number": "1973AMMAN03057", "date": "07 JUN 1973",
-     "extracted_references": ["73STATE93410"]}
+        {"document_number": "1973AMMAN03057", "date": "07 JUN 1973",
+         "extracted_references": ["73STATE93410"]}
 """
 
 from __future__ import annotations
@@ -408,10 +408,16 @@ class CoverageTracker:
 
 
 def read_reftel(path: str):
-    """Yield (doc_number, date, attr_reference, ref_list) from a .reftel.ndjson file.
+    """Yield (doc_number, date, attr_reference, ref_list) from a flattened reftel NDJSON file.
 
-    ``ref_list`` is the pre-split ``reference`` field (list of strings, or None).
+    ``ref_list`` is the pre-split ``references`` field (list from ``_reference``, or None).
     ``attr_reference`` is the raw attribute string (fallback).
+
+    Generated from full extractor output via::
+
+        jq -Mc '{"references": ._reference, "attr_reference": ."Message Attributes"."Reference",
+                  "document_number": ."Message Attributes"."Document Number",
+                  "date": ."Message Attributes"."Draft Date" // ."Message Attributes"."Sent Date"}'
     """
     with open(path, "r", encoding="utf-8") as f:
         for line in f:
@@ -425,7 +431,7 @@ def read_reftel(path: str):
             doc = obj.get("document_number") or ""
             date = obj.get("date") or ""
             attr_ref = obj.get("attr_reference") or ""
-            ref_list = obj.get("reference")
+            ref_list = obj.get("references")
             yield doc, date, attr_ref, ref_list
 
 
