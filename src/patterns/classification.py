@@ -17,7 +17,7 @@ def classification():
     rebulk = Rebulk()
 
     rebulk.regex(
-        r"^\s*(?P<classification>" + "|".join(_CLASSIFICATIONS) + r")\s*$",
+        r"^\s*(?P<classification>" + "|".join(_CLASSIFICATIONS) + r")\s*$\n{0,2}",
         name="classification_marker",
         tags=["classification"],
         flags=re.MULTILINE | re.IGNORECASE,

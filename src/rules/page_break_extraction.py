@@ -17,20 +17,11 @@ class StripPageBreaks(Consequence):
 
     def then(self, matches, when_response, context):
         text_end, attr_start, pb_matches, output_value = when_response
-        raw = matches.input_string[text_end:attr_start]
 
         ranges = context.setdefault("_strip_ranges", [])
         for m in sorted(pb_matches, key=lambda m: m.start, reverse=True):
             s = m.start - text_end
             e = m.end - text_end
-            # Eat up to 2 newlines below (page break's own trailing spacing)
-            newlines = 0
-            while e < len(raw) and (raw[e] in "\n\r") and newlines < 2:
-                if raw[e] == "\r" and e + 1 < len(raw) and raw[e + 1] == "\n":
-                    e += 2
-                else:
-                    e += 1
-                newlines += 1
             ranges.append((s, e))
 
         for old in matches.named("page_break"):
