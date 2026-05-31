@@ -396,9 +396,10 @@ If an attribute has more than 30 unique values, the top 15 and bottom 15 are sho
    2081272 Document Unique ID: 00
 ---
 # Draft Date
-      1714 Draft Date: 04 MAY 1976
-      1690 Draft Date: 24 MAR 1976
-      1677 Draft Date: 19 MAR 1976
+**Note: For 1977 documents, this attribute is named `Sent Date` instead of `Draft Date`.**
+    1714 Draft Date: 04 MAY 1976
+    1690 Draft Date: 24 MAR 1976
+    1677 Draft Date: 19 MAR 1976
       1656 Draft Date: 13 FEB 1976
       1650 Draft Date: 26 MAR 1976
       1593 Draft Date: 30 APR 1976

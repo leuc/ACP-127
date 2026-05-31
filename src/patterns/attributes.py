@@ -29,6 +29,7 @@ _KEYS = [
     "Document Unique ID",
     "Draft Date",
     "Drafter",
+    "Sent Date",
     "Enclosure",
     "Errors",
     "Executive Order",
