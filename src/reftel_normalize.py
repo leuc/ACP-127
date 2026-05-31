@@ -364,29 +364,21 @@ class CoverageTracker:
 
 
 def read_reftel(path: str):
-    """Yield (doc_number, date, refs_list) from a .reftel.ndjson file.
-
-    Handles pretty-printed JSON objects separated by ``}\\n{`` boundaries.
-    """
+    """Yield (doc_number, date, refs_list) from a .reftel.ndjson file (one JSON object per line)."""
     with open(path, "r", encoding="utf-8") as f:
-        content = f.read()
-    chunks = content.split("}\n{")
-    for i, chunk in enumerate(chunks):
-        if i == 0:
-            text = chunk + "}"
-        elif i == len(chunks) - 1:
-            text = "{" + chunk
-        else:
-            text = "{" + chunk + "}"
-        try:
-            obj = json.loads(text)
-        except json.JSONDecodeError:
-            continue
-        doc = obj.get("document_number") or ""
-        date = obj.get("date") or ""
-        refs = obj.get("references") or []
-        if isinstance(refs, list):
-            yield doc, date, refs
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            doc = obj.get("document_number") or ""
+            date = obj.get("date") or ""
+            refs = obj.get("references") or []
+            if isinstance(refs, list):
+                yield doc, date, refs
 
 
 def main():
