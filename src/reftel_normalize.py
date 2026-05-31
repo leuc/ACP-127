@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """MRN normalizer for ACP-127 reference data using rebulk functional pattern.
 
-Reads ``results/197?.reftel.ndjson`` files, normalizes each reference
+Reads per-document NDJSON files, normalizes each reference
 string into canonical MRN format using a single rebulk functional pattern
 with O(1) dict-lookup station matching, and outputs NDJSON.
 
     Usage::
 
-        python3 -m src.reftel_normalize [results/197?.reftel.ndjson ...] > all-mrns.ndjson
+        python3 -m src.reftel_normalize <file.ndjson> [...] > output.ndjson
 
-Output format (one JSON line per document)::
+    Output format (one JSON line per document)::
 
     {"document_number": "1973AMMAN03057", "date": "07 JUN 1973",
      "extracted_references": ["73STATE93410"]}
@@ -21,7 +21,7 @@ import json
 import os
 import re
 import sys
-from collections import Counter, defaultdict
+from collections import defaultdict
 from datetime import datetime
 
 from rebulk import Rebulk
@@ -433,29 +433,20 @@ def read_reftel(path: str):
 
 
 def main():
-    paths = sys.argv[1:] if len(sys.argv) > 1 else []
-    if not paths:
-        results_dir = os.path.join(os.path.dirname(__file__), "..", "results")
-        if os.path.isdir(results_dir):
-            paths = sorted(
-                os.path.join(results_dir, f)
-                for f in os.listdir(results_dir)
-                if f.endswith(".reftel.ndjson")
-            )
-    if not paths:
+    if len(sys.argv) < 2:
         sys.stderr.write(
-            "Usage: python3 -m src.reftel-normalize [results/197?.reftel.ndjson ...]\n"
+            "Usage: python3 -m src.reftel_normalize <file.ndjson> [...] > output.ndjson\n"
         )
         sys.exit(1)
 
-    out_path = None
+    paths = sys.argv[1:]
+
     if sys.stdout.isatty():
-        out_path = os.path.join(
-            os.path.dirname(__file__), "..", "results", "all-mrns.ndjson"
+        sys.stderr.write(
+            "ERROR: redirect stdout to a file (e.g. ... > output.ndjson)\n"
         )
-        out = open(out_path, "w", encoding="utf-8")
-    else:
-        out = sys.stdout
+        sys.exit(1)
+    out = sys.stdout
 
     rebulk = _build_rebulk()
     coverage = CoverageTracker()
@@ -557,10 +548,7 @@ def main():
             total_airgrams,
         )
 
-    if out is not sys.stdout:
-        out.close()
-
-    coverage.print_report(paths, out_path)
+    coverage.print_report(paths, None)
 
 
 if __name__ == "__main__":

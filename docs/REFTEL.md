@@ -1,42 +1,4 @@
-# MRN / Reference Extraction
-
-# ── Reference / MRN extraction patterns ───────────────────────────────────────
-
-```python
-RE_CABLE_S1_A = re.compile(
-    r"\b(?P<year>\d{2})[A-Z]:(?P<station>"
-    + STATION_PATTERN
-    + r")(?:'S)?\s*(?P<number>\d{1,10})\b",
-    re.I,
-)
-RE_CABLE_S1_C = re.compile(
-    r"\b(?P<year>\d{2})\s*(?P<station>"
-    + STATION_PATTERN
-    + r")(?:'S)?\s*(?P<number>\d{1,10})\b",
-    re.I,
-)
-RE_CABLE_FALLBACK = re.compile(
-    r"\b(?P<station>" + STATION_PATTERN + r")(?:'S)?\s*(?P<number>\d{1,10})\b",
-    re.I,
-)
-
-RE_AIRGRAM_COMPACT = re.compile(
-    r"\b(?P<year>\d{2})(?P<station>" + STATION_PATTERN + r")A-?(?P<number>\d{1,10})\b",
-    re.I,
-)
-RE_AIRGRAM_SPACED = re.compile(
-    r"\b(?P<year>\d{2})\s*(?P<station>"
-    + STATION_PATTERN
-    + r")\s+A-?(?P<number>\d{1,10})\b",
-    re.I,
-)
-RE_AIRGRAM_FALLBACK = re.compile(
-    r"\b(?P<station>" + STATION_PATTERN + r")\s+A-?(?P<number>\d{1,10})\b",
-    re.I,
-)
-
-RE_DOC_NUMBER = re.compile(r"(?P<year>\d{2})(?P<station>[A-Z]+)0*(?P<number>\d+)")
-```
+# MRN / Reference Normalization
 
 ## MRN Format
 
@@ -47,167 +9,76 @@ YYSTATIONNNNNN
 | Part | Description | Example |
 |------|-------------|---------|
 | `YY` | 2-digit year | `72`, `06` |
-| `STATION` | Uppercase embassy/city/agency name (4+ chars) | `STATE`, `TEHRAN` |
+| `STATION` | Canonical station name (uppercase) | `STATE`, `TEHRAN` |
 | `NNNNN` | Sequential number, leading zeros stripped | `5822` (not `05822`) |
 
-Variants: compact (`72STATE12345`), space-separated (`75 STATE 194199`),
-comma-separated lists (`78 RANGOON 1287, 78 STATE 90518`),
-letter-prefixed (`A. STATE 113893`, `02A:STATE79760`).
+Airgram variant: `YYSTATION-ANNNNN` (e.g. `73BANGKOK-A50`).
 
-## Multi-Stage Matching Strategy
+## Implementation
 
-Patterns are tried in order — most precise first. Each uses `\b` boundaries
-and requires **minimum 4 characters** for station names.
+`src/reftel_normalize.py` — single rebulk functional pattern, O(1) dict-lookup station matching, batch processing.
 
-### Pre-processing
+### Pipeline
 
-1. Strip `REFTEL:`, `REF:`, `REFS:`, `RETEL:`, `REF/TEL:`, `REFERENCE:`
-   (case-insensitive, no `\b` — follows digits)
-2. Split on `|`, `,`, `;`, and `A. B. C.` patterns
-3. Normalise 4-digit years: `1974STATE9201` → `74STATE9201`
-4. Normalise zero-padded numbers: `76FRANKF05822` → `76FRANKF5822`
+1. **Read** per-year NDJSON files (e.g. `1973.reftel.ndjson`) — yields `(doc_number, date, attr_ref, ref_list)`
+2. **Prefer** `ref_list` (pre-split `reference` field) over raw `attr_reference` string
+3. **Clean** each ref string:
+   - Strip `REF:/REFTEL:/RETELS:` prefix
+   - Strip `NOTAL`, `UNCLAS`
+   - Strip letter prefixes (`A.`, `(B)`, `C)`)
+   - Strip `AIRGRAM` marker
+   - Convert 4-digit years to 2-digit
+4. **Batch** all refs into one string: `doc_idx\tdoc_year\tcleaned_ref\n`
+5. **Parse** with one `rebulk.matches()` call per file — each line becomes one MRN or failure
 
-### Stage 1 — Known Station, Space-Separated (most precise)
+### Parsing Logic (`_parse_single_ref`)
 
+Extracts:
+- **Year**: optional 2-digit prefix at start, or falls back to document year
+- **Number**: rightmost run of digits (1-10 chars)
+- **Airgram**: `A[-]` before number
+- **Station**: text between year and number/airgram, looked up in `_STATIONS` dict (O(1))
+
+### Station Matching
+
+- 558 canonical stations + 686 variant-to-canonical mappings
+- Flat `_STATIONS` dict: all variants and canonics point to canonical name
+- `_STOP_STATIONS` blocklist: months, dates, classification words, common non-stations
+
+### No Splitting
+
+The normalizer does **no splitting** of multi-ref strings. Each ref enters `_parse_single_ref` as-is. Upstream `reference` field is expected to provide pre-split individual refs. The `attr_reference` fallback (raw attribute string) will fail for comma-separated or multi-ref strings.
+
+## Coverage (2,081,272 documents)
+
+| Year | Docs | Refs | Matched | Rate | Time |
+|---|---|---|---|---|---|
+| 1973 | 155,278 | 94,515 | 58,973 | 62.4% | 2.96s |
+| 1974 | 239,348 | 148,589 | 97,256 | 65.5% | — |
+| 1975 | 275,335 | 168,064 | 113,932 | 67.8% | — |
+| 1976 | 288,088 | 172,145 | 118,507 | 68.8% | — |
+| 1977 | 296,299 | 175,218 | 121,230 | 69.2% | — |
+| 1978 | 304,641 | 176,060 | 121,846 | 69.2% | — |
+| 1979 | 522,283 | 293,443 | 195,863 | 66.7% | — |
+| **Total** | **2,081,272** | **1,228,034** | **827,607** | **67.4%** | **43.0s** |
+
+## Failure Categories (400,427 total)
+
+| Category | Share | Example |
+|---|---|---|
+| Multi-ref with commas | ~75% | `STATE 093410, B.STATE 105386` |
+| Sender-date format | ~5% | `USCINCRED 311345 Z MAY 73` |
+| Non-station sender codes | ~5% | `EMBTEL`, `IAEA VIENNA`, `EC BRUSSELS` |
+| `AND` / `;` / letter-dot separators | ~5% | `73 STATE 115778 AND COPENHAGEN 130` |
+| Genuine garbage | ~5% | `PARA 2`, `MILLS LETTER TO BLAKE MAY 25` |
+| OCR issues | ~5% | `73 STATE 1 O1684`, `73 STATE 2118984` |
+
+## Usage
+
+```bash
+# Normalize all years
+python3 -m src.reftel_normalize *.reftel.ndjson > all-mrns.ndjson
+
+# Build reference graph
+python3 src/reftel2graph.py all-mrns.ndjson reference-graph.graphml
 ```
-\b(?P<year>\d{2})\s+(?P<station>STATION_LIST)\s+(?P<number>\d{1,10})\b
-```
-
-Matches `79 STATE 113893`, `74 TEHRAN 2481`. Zero false positives.
-
-### Stage 2 — Known Station, A: Prefix
-
-```
-\b(?P<year>\d{2})[A-Z]:(?P<station>STATION_LIST)\s*(?P<number>\d{1,10})\b
-```
-
-Matches `02A:STATE79760`.
-
-### Stage 3 — Known Station, Compact
-
-```
-\b(?P<year>\d{2})(?P<station>STATION_LIST)\s*(?P<number>\d{1,10})\b
-```
-
-Matches `72STATE12345`, `76LAGOS12828`.
-
-### Stage 4 — Generic Multi-Word (4+ chars per word)
-
-```
-\b(?P<year>\d{2})\s+(?P<station>[A-Z]{4,}(?:\s+[A-Z]{4,})*)\s+(?P<number>\d{1,10})\b
-```
-
-Matches unknown multi-word stations like `78 USUN NEW YORK 1030`.
-Rejects 3-letter tokens (`DTG`, `MAY`).
-
-### Stage 5 — Generic Compact Uppercase
-
-```
-\b(?P<year>\d{2})(?P<station>[A-Z]{4,20})\s*(?P<number>\d{1,10})\b
-```
-
-### Stage 6 — Mixed/Lower Case
-
-```
-\b(?P<year>\d{2})(?P<station>[A-Za-z]{4,20})\s*(?P<number>\d{1,10})\b
-```
-
-Matches `02Kathmandu209`, `02secstate201932`.
-
-### STOP_STATIONS Filter
-
-All Stage 4–6 matches are checked against a blocklist of words that are
-never valid station names:
-
-```
-JANUARY, FEBRUARY, MARCH, APRIL, MAY, JUNE, JULY, AUGUST,
-SEPTEMBER, OCTOBER, NOVEMBER, DECEMBER,
-JAN, FEB, MAR, APR, MAY, JUN, JUL, AUG, SEP, OCT, NOV, DEC,
-DATED, DATE, NUMBER, NBR, REFERENCE, REF, REFTEL,
-PAGE, PAGES, SECTION,
-CLASSIFIED, UNCLASSIFIED, SECRET, CONFIDENTIAL, SENSITIVE,
-NOTAL, EXDIS, NODIS, STADIS,
-MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY
-```
-
-### Fallback — Year Injection
-
-When no pattern matches but a known station + number is found anywhere in
-the part, the document's year is prepended (using pre-compiled `RE_S_FALLBACK`):
-
-```
-STATE 113893 + doc_year=79 → 79STATE113893
-```
-
-Example: `A. STATE 113893 DTG 042237Z MAY 79` extracts `79STATE113893`.
-
-## Coverage
-
-Measured against `reftel.json` (all reference fields from both sources):
-
-| Metric | CSV | Tel |
-|--------|-----|-----|
-| Total documents | 251,287 | 1,878,933 |
-| Unique referenced MRNs | 130,194 | 868,303 |
-| In dataset | 76,666 | 468,540 |
-| **Not in dataset** | **53,528** | **399,763** |
-| Exist but no text | 0 | 22,055 |
-
-The 250K reduction in tel missing refs (from 650K to 400K) is attributed to
-the `STOP_STATIONS` filter eliminating month names, date labels, and
-classification words that were incorrectly matched as station names.
-
-## Edge Cases
-
-| # | Case | Handling |
-|---|------|----------|
-| 1 | `REFTEL:` prefix | Strip before matching |
-| 2 | `|`, `,`, `;` separators | Split on all three |
-| 3 | `A. B. C.` letter prefixes | Split on `\b[A-Z]\.\s*` |
-| 4 | Space-separated | Stage 1 |
-| 5 | Mixed case | Stage 6 |
-| 6 | 4-digit year `0100HARARE7134` | Normalise to `00HARARE7134` |
-| 7 | `A:` separator `02A:STATE79760` | Stage 2 |
-| 8 | Zero-padded number `76FRANKF05822` | `mrn()` strips leading zeros |
-| 9 | 3-letter tokens `DTG`, `MAY` | Rejected (4-char minimum) |
-| 10 | Month names `JANUARY`, `DATED` | Rejected by `STOP_STATIONS` |
-| 11 | FBIS `00FBIS2813114ZFEB00` | Not an MRN, correctly skipped |
-| 12 | No year prefix `STATE 113893` | Year injected via fallback |
-| 13 | `n/a` / `N/A` / `NONE` | Skipped (772K entries, 36%) |
-
-## False Positive Prevention
-
-A false positive (`93DTG0437`) was discovered and fixed:
-
-```
-Input:  A. STATE 113893 DTG 042237Z MAY 79 - B. STATE 127051 DTG 182320Z MAY 79
-Before: → ["93DTG0437"]   ← WRONG (DTG is not a station)
-After:  → ["79STATE113893", "79STATE127051"]   ← CORRECT
-```
-
-**Root cause:** `[A-Z]+` matched 3-letter `DTG` as a station name. Fixed by:
-1. Requiring minimum 4 characters for station names in all patterns
-2. Adding `\b` boundaries to prevent matching digits embedded in larger numbers
-3. Adding `STOP_STATIONS` blocklist for months, dates, and classification words
-
-## Station Whitelist
-
-Compiled from `old-extract`'s `re_emb` pattern, `from.stations` (the `From:`
-field distribution from .tel Message Attributes), and stations observed in
-reference data. Includes common OCR typos and multi-word embassy names.
-
-Single-word stations embed in `SINGLE_STATIONS`; multi-word stations
-(USUN NEW YORK, HONG KONG, etc.) embed in `MULTI_STATIONS` with `\s+`
-for regex alternation.
-
-## Graph Tool
-
-`src/reftel2graph.py` builds a **directed** igraph from `reftel.json`:
-
-```
-python3 src/reftel2graph.py reftel.json output.graphml
-```
-
-Vertices: every unique `document_number` + every unique `extracted_reference`.
-Edges: each `(document_number → ref)` pair (directed for correct PageRank).
-Vertex attributes: `label`, `degree`, `pagerank`. No parsing or normalization.
