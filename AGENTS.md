@@ -284,6 +284,7 @@ The reference normalization pipeline converts raw ACP-127 reference strings into
 | Vertices | 1,619,261 (1,010,077 primary) |
 | Edges | 1,274,070 |
 | Weakly connected components | 450,463 |
+| WCC size distribution (p50/p90/p99/p99.9) | 2 / 5 / 18 / 68 |
 | Giant component | 119,431 (7.38% of nodes) |
 | Reciprocity | 0.0003 |
 | Transitivity | 0.0636 |
