@@ -54,20 +54,25 @@ class ParseSubject(Rule):
 
         rest = mc_text[m.end() :]
         cont_end = self._END_PAT.search(rest)
-        cont_end_offset = cont_end.start() if cont_end else len(rest)
-        block_text = mc_text[m.end() : m.end() + cont_end_offset]
+        block_end = cont_end.start() if cont_end else len(rest)
+        block_text = mc_text[m.end() : m.end() + block_end]
 
         parts = [first_val]
+        end_offset = 0
         for line in block_text.split("\n"):
+            next_offset = len(line) + 1
+            if not self._CONT_PAT.match(line):
+                break
             stripped = line.strip()
             if stripped:
                 parts.append(stripped)
+            end_offset += next_offset
 
         value = " ".join(parts)
 
         return Match(
             mc_start + start,
-            mc_start + m.end() + cont_end_offset,
+            mc_start + m.end() + end_offset,
             value=value,
             name="subject",
             tags=["message_content"],
