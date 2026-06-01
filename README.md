@@ -92,30 +92,17 @@ cat result.json | jq .
 cat coverage.json | jq .
 ```
 
-## POSIX Shell Loop Example (Parallel Processing)
+## Batch Processing (Multiple Years)
 
-Process each year individually in parallel using background jobs and save results to separate files:
+The script uses multiprocessing internally (`ProcessPoolExecutor`), so a simple sequential loop is all that's needed:
 
 ```bash
 mkdir -p results
 for year in {1973..1979}; do
-    echo "Starting processing for $year (background job)..."
-    python3 -m src.extractor cables/$year/ 2>results/$year-coverage.json >results/$year-results.ndjson &
-    echo "Background job started for $year with PID $!"
-done
-
-# Wait for all background jobs to complete
-echo "Waiting for all years to finish processing..."
-wait
-
-echo "All years have finished processing."
-for year in {1973..1979}; do
-    if [ -f "results/$year-results.ndjson" ]; then
-        count=$(wc -l < "results/$year-results.ndjson")
-        echo "Finished $year: $count records"
-    else
-        echo "No results found for $year"
-    fi
+    echo "Processing $year ..."
+    python3 -m src.extractor cables/$year/ 2>results/$year-coverage.json >results/$year-results.ndjson
+    count=$(wc -l < "results/$year-results.ndjson")
+    echo "Finished $year: $count records"
 done
 ```
 
