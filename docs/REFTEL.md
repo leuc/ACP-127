@@ -23,9 +23,9 @@ Airgram variant: `YYSTATION-ANNNNN` (e.g. `73BANGKOK-A50`).
 1. **Extract** structured JSON from ACP-127 messages via `src.extractor`
 2. **Flatten** to reftel NDJSON:
 
-        jq -Mc '{"references": ._reference, "attr_reference": ."Message Attributes"."Reference", "document_number": ."Message Attributes"."Document Number", "date": ."Message Attributes"."Draft Date" // ."Message Attributes"."Sent Date"}' input.ndjson > year.reftel.ndjson
+        jq -Mc '{"references": ._reference, "attr_reference": ."Message Attributes"."Reference", "document_number": ."Message Attributes"."Document Number", "date": ."Message Attributes"."Draft Date" // ."Message Attributes"."Sent Date", "message_preview": (._message_content | if . then split("\n")[:100] | join("\n") else null end)}' input.ndjson > year.reftel.ndjson
 
-3. **Read** per-year NDJSON files — yields `(doc_number, date, attr_ref, ref_list)`
+3. **Read** per-year NDJSON files — yields `(doc_number, date, attr_ref, ref_list, message_preview)`
 4. **Prefer** `ref_list` (pre-split `references` field) over raw `attr_reference` string
 3. **Clean** each ref string:
    - Strip `REF:/REFTEL:/RETELS:` prefix

@@ -120,7 +120,8 @@ python3 -m src.extractor <paths...>
 for year in {1973..1979}; do
   jq -Mc '{"references": ._reference, "attr_reference": ."Message Attributes"."Reference",
            "document_number": ."Message Attributes"."Document Number",
-           "date": ."Message Attributes"."Draft Date" // ."Message Attributes"."Sent Date"}' \
+           "date": ."Message Attributes"."Draft Date" // ."Message Attributes"."Sent Date",
+           "message_preview": (._message_content | if . then split("\n")[:100] | join("\n") else null end)}' \
     ${year}.ndjson > ${year}.reftel.ndjson
 done
 

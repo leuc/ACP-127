@@ -12,7 +12,8 @@ with O(1) dict-lookup station matching, and outputs NDJSON.
     Output format (one JSON line per document)::
 
         {"document_number": "1973AMMAN03057", "date": "07 JUN 1973",
-         "extracted_references": ["73STATE93410"]}
+         "extracted_references": ["73STATE93410"],
+         "message_preview": "..."}
 """
 
 from __future__ import annotations
@@ -610,16 +611,19 @@ class CoverageTracker:
 
 
 def read_reftel(path: str):
-    """Yield (doc_number, date, attr_reference, ref_list) from a flattened reftel NDJSON file.
+    """Yield (doc_number, date, attr_reference, ref_list, message_preview)
+    from a flattened reftel NDJSON file.
 
     ``ref_list`` is the pre-split ``references`` field (list from ``_reference``, or None).
     ``attr_reference`` is the raw attribute string (fallback).
+    ``message_preview`` is the first 100 lines of ``_message_content`` (string, or None).
 
     Generated from full extractor output via::
 
         jq -Mc '{"references": ._reference, "attr_reference": ."Message Attributes"."Reference",
                   "document_number": ."Message Attributes"."Document Number",
-                  "date": ."Message Attributes"."Draft Date" // ."Message Attributes"."Sent Date"}'
+                  "date": ."Message Attributes"."Draft Date" // ."Message Attributes"."Sent Date",
+                  "message_preview": (._message_content | if . then split("\\n")[:100] | join("\\n") else null end)}'
     """
     with open(path, "r", encoding="utf-8") as f:
         for line in f:
@@ -634,7 +638,8 @@ def read_reftel(path: str):
             date = obj.get("date") or ""
             attr_ref = obj.get("attr_reference") or ""
             ref_list = obj.get("references")
-            yield doc, date, attr_ref, ref_list
+            message_preview = obj.get("message_preview")
+            yield doc, date, attr_ref, ref_list, message_preview
 
 
 # ── Main ───────────────────────────────────────────────────────────────────
@@ -662,13 +667,15 @@ def main():
     for path in paths:
         sys.stderr.write(f"Processing {path} ...\n")
 
-        docs: list[tuple[str, str]] = []
+        docs: list[tuple[str, str, str | None]] = []
         batch_lines: list[str] = []
         batch_ref_counts: list[int] = []
 
-        for doc_number, doc_date, attr_ref, ref_list in read_reftel(path):
+        for doc_number, doc_date, attr_ref, ref_list, message_preview in read_reftel(
+            path
+        ):
             doc_idx = len(docs)
-            docs.append((doc_number, doc_date))
+            docs.append((doc_number, doc_date, message_preview))
 
             doc_year = _extract_year_from_date(doc_date)
 
@@ -732,7 +739,7 @@ def main():
         total_cables = 0
         total_airgrams = 0
 
-        for i, (doc_number, doc_date) in enumerate(docs):
+        for i, (doc_number, doc_date, message_preview) in enumerate(docs):
             normalized = doc_mrns.get(i, [])
             ref_parts = batch_ref_counts[i]
 
@@ -753,6 +760,8 @@ def main():
                 "date": doc_date,
                 "extracted_references": normalized if normalized else None,
             }
+            if message_preview:
+                result["message_preview"] = message_preview
             out.write(json.dumps(result, ensure_ascii=False) + "\n")
 
         for fr in failed_refs:

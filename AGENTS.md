@@ -239,16 +239,16 @@ The reference normalization pipeline converts raw ACP-127 reference strings into
 2. **Flatten to reftel NDJSON** (extracts only relevant fields for faster loading):
 
         for year in {1973..1979}; do
-          jq -Mc '{"references": ._reference, "attr_reference": ."Message Attributes"."Reference", "document_number": ."Message Attributes"."Document Number", "date": ."Message Attributes"."Draft Date" // ."Message Attributes"."Sent Date"}' results/${year}.ndjson > results/${year}.reftel.ndjson
+          jq -Mc '{"references": ._reference, "attr_reference": ."Message Attributes"."Reference", "document_number": ."Message Attributes"."Document Number", "date": ."Message Attributes"."Draft Date" // ."Message Attributes"."Sent Date", "message_preview": (._message_content | if . then split("\n")[:100] | join("\n") else null end)}' results/${year}.ndjson > results/${year}.reftel.ndjson
         done
 
-   This produces per-year NDJSON files (e.g. `1973.reftel.ndjson`) with `document_number`, `date`, `attr_reference`, and `references` fields.
+   This produces per-year NDJSON files (e.g. `1973.reftel.ndjson`) with `document_number`, `date`, `attr_reference`, `references`, and `message_preview` (first 100 lines of the cleaned body text) fields.
 
 3. **Normalize references** to canonical MRN format:
 
         python3 -m src.reftel_normalize *.reftel.ndjson > all-mrns.ndjson
 
-   Reads per-document NDJSON files, normalizes each reference string to `YYSTATIONNNNNN` format using a single rebulk functional pattern with O(1) dict-lookup station matching. Outputs NDJSON with `extracted_references` array.
+   Reads per-document NDJSON files, normalizes each reference string to `YYSTATIONNNNNN` format using a single rebulk functional pattern with O(1) dict-lookup station matching. Outputs NDJSON with `extracted_references` array and `message_preview` (first 100 lines of body text).
 
    **Data source priority:**
    - Primary: the `references` field (pre-split list of individual references from the message body)
@@ -262,7 +262,7 @@ The reference normalization pipeline converts raw ACP-127 reference strings into
 
         python3 src/reftel2graph.py all-mrns.ndjson reference-graph.graphml
 
-   Reads the normalized NDJSON, builds a directed iGraph where vertices are document numbers and edges point from a document to its references. Missing documents (referenced but not in the dataset) are flagged with `missing=True`.
+   Reads the normalized NDJSON, builds a directed iGraph where vertices are document numbers and edges point from a document to its references. Each vertex has `date` and `message_preview` (first 100 lines of body text) string attributes. Missing documents (referenced but not in the dataset) are flagged with `missing=True`.
 
 ## Normalizer performance
 
@@ -317,13 +317,13 @@ Top authorities (by PageRank) are all `STATE` messages. Top broadcasters (by out
 | `src/reftel2graph.py` | 83 | GraphML builder from normalized NDJSON |
 | `src/station_data.py` | 1844 | 558 canonical stations + 686 variant mappings |
 | `src/station_index.py` | — | StationIndex class (not used by normalizer; uses `_STATIONS` dict directly) |
-| `*.reftel.ndjson` | input | Per-year NDJSON with `document_number`, `date`, `attr_reference`, `reference` |
+| `*.reftel.ndjson` | input | Per-year NDJSON with `document_number`, `date`, `attr_reference`, `reference`, `message_preview` |
 
 # Normalizer architecture
 
 ```
 read_reftel(path)
-  └─ yields (doc_number, date, attr_ref, ref_list)
+  └─ yields (doc_number, date, attr_ref, ref_list, message_preview)
 
 main loop per file:
   ├─ prefers `references` list over attr_ref (raw string)

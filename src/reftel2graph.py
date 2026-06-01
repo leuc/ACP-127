@@ -4,6 +4,7 @@ import json
 import os
 import igraph
 
+
 def main():
     if len(sys.argv) != 3:
         sys.stderr.write(f"Usage: {sys.argv[0]} ref.json output.graphml\n")
@@ -23,6 +24,7 @@ def main():
     primary_docs = set()  # Track IDs that exist as a document_number
     edges = set()
     node_dates = {}
+    node_previews = {}
     count = 0
 
     with open(src, encoding="utf-8") as f:
@@ -49,6 +51,9 @@ def main():
             if doc_date:
                 node_dates[doc] = doc_date
 
+            doc_preview = row.get("message_preview")
+            if doc_preview:
+                node_previews[doc] = doc_preview
 
             for r in refs:
                 edges.add((doc, r))
@@ -58,7 +63,9 @@ def main():
             if count % 500000 == 0:
                 sys.stderr.write(f"  {count} lines...\n")
 
-    sys.stderr.write(f"\nVertices: {len(vertices)} (Primary: {len(primary_docs)}), Edges: {len(edges)}\n")
+    sys.stderr.write(
+        f"\nVertices: {len(vertices)} (Primary: {len(primary_docs)}), Edges: {len(edges)}\n"
+    )
 
     ids = sorted(vertices)
     idx = {v: i for i, v in enumerate(ids)}
@@ -71,6 +78,7 @@ def main():
     # Map node properties
     g.vs["label"] = ids
     g.vs["date"] = [node_dates.get(vid, "") for vid in ids]
+    g.vs["message_preview"] = [node_previews.get(vid, "") for vid in ids]
 
     # Flag missing documents: True if it ONLY appeared as a reference
     g.vs["missing"] = [vid not in primary_docs for vid in ids]
