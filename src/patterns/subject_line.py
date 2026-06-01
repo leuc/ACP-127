@@ -14,7 +14,7 @@ from rebulk.remodule import re
 from ..rules.message_content import BuildMessageContent
 
 _SUBJECT_RE = re.compile(
-    r"^(?:SUBJECT|SUBJ|SUJ):\s*(.*?)$", re.MULTILINE | re.IGNORECASE
+    r"^(?:SUBJECT|SUBJ|SUB|SUJ)\s*:\s*(.*?)$", re.MULTILINE | re.IGNORECASE
 )
 
 
