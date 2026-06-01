@@ -32,7 +32,7 @@ class ParseRef(Rule):
     dependency = BuildMessageContent
 
     _REF_RE = re.compile(
-        r"^(?:REF(?:ERENCE)?S?\s*:|REF\s*:|REFTEL:|RETELS?\s*:)[ \t]*"
+        r"^[ \t]*(?:REFTEL\.?\s*:?|RETELS?\.?\s*:?|REF(?:ERENCE)?S?\.?\s*:?)[ \t]*"
         r"((?:(?!\n[ \t]*\n).){0,200})",
         re.MULTILINE | re.DOTALL | re.IGNORECASE,
     )

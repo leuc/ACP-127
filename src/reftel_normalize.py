@@ -34,9 +34,7 @@ from station_data import STATIONS, _VARIANT_TO_TARGET
 
 # ── Pre-processing constants ────────────────────────────────────────────────
 
-_PREFIX_STRIP = re.compile(
-    r"^(?:REF(?:ERENCE)?S?\s*:|REF\s*:|REFTEL:|RETELS?\s*:)\s*", re.I
-)
+_PREFIX_STRIP = re.compile(r"^(?:REFTEL|RETELS?|REF(?:ERENCE)?S?)\.?\s*:?\s*", re.I)
 _LETTER_PREFIX = re.compile(r"^\s*(?:\(\s*[A-Z]\s*\)\s*|[A-Z]\.\s*|[A-Z]\)\s*)+")
 _NOTAL_CLEAN = re.compile(r"\s*\(?\s*NOTAL\b\s*\)?\s*", re.I)
 _UNCLAS = re.compile(r"\bUNCLAS\s+", re.I)
