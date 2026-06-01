@@ -43,6 +43,27 @@ _AIRGRAM_STRIP = re.compile(r"\bAIRGRAM\s+", re.I)
 _NA_RE = re.compile(r"^(?:\s*n/a\s*|\s*N/A\s*|\s*none\s*)$", re.I)
 _4DIGIT_YEAR = re.compile(r"\b(?P<y>\d{4})(?P<rest>[A-Z])")
 _RETENTION_STRIP = re.compile(r"\n\s*Retention:\s*\d+\s*$")
+_TRAILING_CLEAN = re.compile(
+    r"\s*"
+    r"(?:"
+    r"\([^()]*\)"  # parentheticals (...)
+    r"|"
+    r"[,:]?\s*(?:"
+    r"JANUARY|FEBRUARY|MARCH|APRIL|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER"
+    r"|JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC"
+    r")"
+    r"(?:\.?)\s+(?:\d{1,2},?\s*)?(?:\d{2,4})?"  # month [day] [year], e.g. JUN 73 / MARCH 21, 1973
+    r"|"
+    r"\d{6}\s*Z(?:\s+(?:"
+    r"JANUARY|FEBRUARY|MARCH|APRIL|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER"
+    r"|JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC"
+    r")"
+    r"(?:\.?)\s+(?:\d{1,2},?\s+)?\d{2,4})?"  # time Z [month year], e.g. 282233 Z APR 73
+    r"|"
+    r"\d{1,2}/\d{1,2}/(?:\d{2}|\d{4})"  # numeric date, e.g. 1/17/73
+    r")*[,.]?\s*$",
+    re.I,
+)
 _DATE_FORMATS = [
     "%d %b %Y",
     "%d-%b-%Y %I:%M:%S %p",
@@ -58,6 +79,44 @@ for canon in STATIONS:
     _STATIONS[canon.upper()] = canon
 for variant, canon in _VARIANT_TO_TARGET.items():
     _STATIONS[variant.upper()] = canon
+
+_SENDER_DATE_STATIONS = frozenset(
+    s.upper()
+    for s in [
+        "SECDEF",
+        "CINCPAC",
+        "USCINCRED",
+        "CINCUSAREUR",
+        "MACTHAI",
+        "CINCRED",
+        "USMILADREP",
+        "CINC",
+        "USCINCEUR",
+        "CINCLANT",
+        "CINCPACFLT",
+        "CINCLANTFLT",
+        "CINCUNC",
+        "USCINCEC",
+        "KIRTLAND",
+        "KIRTLAND AFB MSG",
+        "SS GERMANY",
+        "SS",
+        "CINCUSNAVEUR",
+        "CINCPACREP",
+        "CINCSAC",
+        "CINCAD",
+        "CINCNORAD",
+        "BNDD",
+        "DIA",
+        "INS",
+        "USPHS",
+        "FAA",
+        "USIA",
+        "AGRICULTURE",
+        "TOSEC",
+        "SECSTATE",
+    ]
+)
 
 _STOP_STATIONS = frozenset(
     s.upper()
@@ -186,11 +245,81 @@ _NEW_REF_RE = re.compile(r"^\s{2,}(?:(?:[A-Z][\).]|\([A-Z]\))\s|[A-Z]\.\s)")
 _CONT_TEXT_RE = re.compile(r"^\s{2,}\S")
 
 
+_REF_SEP_AND = re.compile(r"\s+(?:AND|&)\s+", re.I)
+_REF_SEP_LETTER = re.compile(
+    r"[,:]?\s+(?:"
+    r"[A-Z]\.\s*"  # B. (no space after dot)
+    r"|[A-Z]\s*\.\s*"  # B . (space before dot)
+    r"|[A-Z]\)\s+"  # B)
+    r"|\([A-Z]\)\s+"  # (B)
+    r")(?=[A-Z]{3})",
+    re.I,
+)
+_REF_SEP_COLON = re.compile(r":\s+(?=(?:\d{2}\s+)?[A-Z]{3})")
+_REF_NON_SEP = (
+    "(?:"
+    + "|".join(
+        [
+            "JAN",
+            "FEB",
+            "MAR",
+            "APR",
+            "MAY",
+            "JUN",
+            "JUL",
+            "AUG",
+            "SEP",
+            "OCT",
+            "NOV",
+            "DEC",
+            "JANUARY",
+            "FEBRUARY",
+            "MARCH",
+            "APRIL",
+            "JUNE",
+            "JULY",
+            "AUGUST",
+            "SEPTEMBER",
+            "OCTOBER",
+            "NOVEMBER",
+            "DECEMBER",
+            "DATED",
+            "PARA",
+            "ITEM",
+            "SECTION",
+            "PAGE",
+            "SUBJECT",
+            "AND",
+            "THE",
+            "OF",
+            "FOR",
+            "TO",
+            "IN",
+            "BY",
+            "WITH",
+            "NOT",
+            "PREVIOUS",
+            "SUMMARY",
+            "BEGIN",
+            "END",
+            "PART",
+            "NOTE",
+        ]
+    )
+    + ")"
+)
+_REF_SEP_COMMA = re.compile(
+    r",\s+(?=(?:\d{2}\s+)?(?!" + _REF_NON_SEP + r")[A-Z]{3})", re.I
+)
+_REF_NUM_PREFIX = re.compile(r"^\d+[\).]\s*")
+
+
 def _split_refs(text: str) -> list[str]:
     """Split raw reference text into individual reference strings.
 
     Handles multi-line continuation patterns and in-line separators
-    (semicolons, comma/whitespace before letter prefixes).
+    (AND, &, semicolons, comma/colon between station+number pairs,
+    letter-prefix markers, numbered lists).
 
     Input is the raw text from ``_reference``, which may include the
     ``REF:`` keyword and continuation lines.
@@ -224,10 +353,14 @@ def _split_refs(text: str) -> list[str]:
     items: list[str] = []
     for item in initial:
         for part in item.split(";"):
-            for sub in re.split(r"[,:\s]{2,}(?=(?:[A-Z][\).]|\([A-Z]\))\s)", part):
-                sub = sub.strip()
-                if sub:
-                    items.append(sub)
+            for sub_and in _REF_SEP_AND.split(part):
+                for sub_letter in _REF_SEP_LETTER.split(sub_and):
+                    for sub_colon in _REF_SEP_COLON.split(sub_letter):
+                        for sub_comma in _REF_SEP_COMMA.split(sub_colon):
+                            sub_comma = sub_comma.strip()
+                            sub_comma = _REF_NUM_PREFIX.sub("", sub_comma)
+                            if sub_comma:
+                                items.append(sub_comma)
     return items
 
 
@@ -269,20 +402,26 @@ def _parse_single_ref(text: str, doc_year: str) -> tuple[str, bool] | None:
 
     is_airgram = False
     station_end = num_start
-    if station_end >= 2 and text[station_end - 1] == "-":
+    if (
+        station_end >= 3
+        and text[station_end - 1] == "-"
+        and text[station_end - 2].upper() == "A"
+        and text[station_end - 3] in " \t"
+    ):
+        station_end -= 2
+        is_airgram = True
+    elif (
+        station_end >= 2
+        and text[station_end - 1].upper() == "A"
+        and text[station_end - 2] in " \t"
+    ):
         station_end -= 1
-        if station_end >= 1 and text[station_end - 1].upper() == "A":
-            station_end -= 1
-            is_airgram = True
-    elif station_end >= 1 and text[station_end - 1].upper() == "A":
-        if station_end >= 2 and text[station_end - 2] in " \t":
-            station_end -= 1
-            is_airgram = True
+        is_airgram = True
 
     raw_station = text[idx:station_end].strip()
     while raw_station and not raw_station[-1].isalpha():
         raw_station = raw_station[:-1]
-    if not raw_station or len(raw_station) < 3:
+    if not raw_station:
         return None
     if not all(c.isalpha() or c in " \t" for c in raw_station):
         return None
@@ -293,7 +432,20 @@ def _parse_single_ref(text: str, doc_year: str) -> tuple[str, bool] | None:
         return None
 
     canonical = _STATIONS.get(raw_station_upper)
+
+    # Fallback: if station not found but ends with A, try without trailing A as airgram
+    if canonical is None and len(raw_station) > 3 and raw_station_upper[-1] == "A":
+        stripped = raw_station_upper[:-1].rstrip()
+        if stripped not in _STOP_STATIONS:
+            canonical = _STATIONS.get(stripped)
+            if canonical is not None:
+                is_airgram = True
+
     if canonical is None:
+        return None
+
+    # Reject sender-date format (6+ digit DDHHMM time) for command/agency stations
+    if len(raw_number) >= 6 and raw_station_upper in _SENDER_DATE_STATIONS:
         return None
 
     number = _clean_number(raw_number)
@@ -324,6 +476,7 @@ def _batch_match(input_string: str, context: dict) -> list[dict] | None:
         doc_idx, doc_year, text = parts[0], parts[1], parts[2]
 
         text = _NOTAL_CLEAN.sub("", text).strip()
+        text = _TRAILING_CLEAN.sub("", text).strip()
         if not text:
             continue
         result = _parse_single_ref(text, doc_year)

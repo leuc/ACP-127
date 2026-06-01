@@ -327,6 +327,7 @@ STATIONS = {
         "BUENOS",
     ],
     "BUENOSAIRES": [
+        "BA",
         "BUENOS AIRES",
         "BUENOS AIES",
         "BUENOSAIRES",
@@ -530,6 +531,7 @@ STATIONS = {
         "ECBRU",
     ],
     "ECBRUSSELS": [
+        "EC BRUSSELS",
         "ECBRUSSELS",
     ],
     "EDINBU": [
@@ -1204,6 +1206,7 @@ STATIONS = {
         "OECDP",
     ],
     "OECDPARIS": [
+        "OECD PARIS",
         "OECDPARIS",
     ],
     "OPORTO": [
