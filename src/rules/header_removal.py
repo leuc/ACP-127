@@ -1,18 +1,21 @@
 """Strip extracted header fields from message_content.
 
 Runs as the final cleaning step after all extraction is complete.
-Selects existing header matches (distribution, dtg, from, to, subject,
-ref) within the message content region and removes their text from
-_message_content.
+Selects existing header matches (distribution, dtg, from, to, info,
+drafted_by, approved_by, etc.) within the message content region and
+removes their text from _message_content.
 
 Header matches use two coordinate systems:
   - dtg, from: original raw-text coordinates (regex matches on full input)
-  - distribution, to, subject, ref: cleaned-text coordinates (parsed from
+  - distribution, to, info, etc.: cleaned-text coordinates (parsed from
     the message_content value)
 
 For original-coord matches, the raw text is searched for within the
 cleaned message_content value.  All instances per field are stripped —
 section markers cause some headers (DTG, FM) to appear twice.
+
+Note: ``reference`` and ``subject`` matches are NOT stripped from
+_message_content — they are preserved in the body output.
 """
 
 from rebulk import Rule
@@ -26,8 +29,6 @@ _HEADER_NAMES = {
     "dtg",
     "from",
     "to",
-    "subject",
-    "reference",
     "section_marker",
     "dash_counters",
     "info",
@@ -40,8 +41,6 @@ _ORIGINAL_COORDS = {"dtg", "from"}
 _CLEANED_COORDS = {
     "distribution",
     "to",
-    "subject",
-    "reference",
     "info",
     "drafted_by",
     "approved_by",
@@ -160,10 +159,12 @@ class StripHeaders(Consequence):
 class RemoveHeaders(Rule):
     """Remove extracted header fields from message_content.
 
-    Strips distribution, dtg, from, to, subject, and ref text from
-    _message_content after all extraction is complete.  When section
-    markers exist, headers that appear in each section (DTG, FM) are
-    all stripped.
+    Strips distribution, dtg, from, to, info, drafted_by, approved_by,
+    section_marker, dash_counters, etc. from _message_content after all
+    extraction is complete.  reference and subject are NOT stripped.
+
+    When section markers exist, headers that appear in each section
+    (DTG, FM) are all stripped.
     """
 
     priority = 16

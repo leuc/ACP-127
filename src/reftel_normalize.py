@@ -182,6 +182,57 @@ def _preprocess_attr(attr_ref: str) -> str | None:
     return _preprocess(text)
 
 
+# ── Reference splitting (moved from src/patterns/ref_line.py) ──────────────
+
+_NEW_REF_RE = re.compile(r"^\s{2,}(?:(?:[A-Z][\).]|\([A-Z]\))\s|[A-Z]\.\s)")
+_CONT_TEXT_RE = re.compile(r"^\s{2,}\S")
+
+
+def _split_refs(text: str) -> list[str]:
+    """Split raw reference text into individual reference strings.
+
+    Handles multi-line continuation patterns and in-line separators
+    (semicolons, comma/whitespace before letter prefixes).
+
+    Input is the raw text from ``_reference``, which may include the
+    ``REF:`` keyword and continuation lines.
+    """
+    if not text:
+        return []
+    text = text.strip()
+    if not text:
+        return []
+    text = _PREFIX_STRIP.sub("", text).strip()
+    if not text:
+        return []
+
+    # Line-by-line continuation handling (mirrors original ParseRef logic)
+    lines = text.split("\n")
+    initial: list[str] = []
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if i == 0 or not _CONT_TEXT_RE.match(line):
+            initial.append(stripped)
+        elif _NEW_REF_RE.match(line):
+            initial.append(stripped)
+        elif initial:
+            initial[-1] += " " + stripped
+        else:
+            initial.append(stripped)
+
+    # In-line separator splitting
+    items: list[str] = []
+    for item in initial:
+        for part in item.split(";"):
+            for sub in re.split(r"[,:\s]{2,}(?=(?:[A-Z][\).]|\([A-Z]\))\s)", part):
+                sub = sub.strip()
+                if sub:
+                    items.append(sub)
+    return items
+
+
 # ── MRN parsing (no regex station matching) ────────────────────────────────
 
 
@@ -472,6 +523,16 @@ def main():
 
             if ref_list and isinstance(ref_list, list):
                 cleaned = [_preprocess(str(r)) for r in ref_list]
+                cleaned = [c for c in cleaned if c]
+                if cleaned:
+                    for c in cleaned:
+                        batch_lines.append(f"{doc_idx}\t{doc_year}\t{c}")
+                    batch_ref_counts.append(len(cleaned))
+                    continue
+
+            if isinstance(ref_list, str):
+                split_items = _split_refs(ref_list)
+                cleaned = [_preprocess(r) for r in split_items]
                 cleaned = [c for c in cleaned if c]
                 if cleaned:
                     for c in cleaned:
