@@ -13,10 +13,14 @@ from .builder import build_rebulk
 from .coverage import CoverageTracker
 from .serializer import result_to_dict
 
+_REBULK_INSTANCE = None
+
 
 def extract_from_text(text, context=None):
-    rebulk = build_rebulk()
-    matches = rebulk.matches(text, context=context or {})
+    global _REBULK_INSTANCE
+    if _REBULK_INSTANCE is None:
+        _REBULK_INSTANCE = build_rebulk()
+    matches = _REBULK_INSTANCE.matches(text, context=context or {})
     return matches
 
 
@@ -85,7 +89,9 @@ def main():
     if args.limit is not None:
         files_to_process = files_to_process[: args.limit]
 
-    rebulk = build_rebulk()
+    global _REBULK_INSTANCE
+    if _REBULK_INSTANCE is None:
+        _REBULK_INSTANCE = build_rebulk()
     tracker = CoverageTracker()
     processed = 0
 
@@ -98,7 +104,7 @@ def main():
             continue
 
         try:
-            matches = rebulk.matches(text)
+            matches = _REBULK_INSTANCE.matches(text)
         except Exception as e:
             sys.stderr.write(f"ERROR: Failed to process matches for {filepath}: {e}\n")
             continue
