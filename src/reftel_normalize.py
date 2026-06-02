@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""MRN normalizer for ACP-127 reference data using rebulk functional pattern.
+"""MRN normalizer for ACP-127 reference data using strict deterministic regex pipeline.
 
-Reads per-document NDJSON files, normalizes each reference
-string into canonical MRN format using a single rebulk functional pattern
-with O(1) dict-lookup station matching, and outputs NDJSON.
+Reads per-document NDJSON files, normalizes each reference string into canonical 
+MRN format, and outputs NDJSON. Date fields are converted to ISO 8601.
 
     Usage::
 
@@ -11,7 +10,7 @@ with O(1) dict-lookup station matching, and outputs NDJSON.
 
     Output format (one JSON line per document)::
 
-        {"document_number": "1973AMMAN03057", "date": "07 JUN 1973",
+        {"document_number": "1973AMMAN03057", "date": "1973-06-07",
          "extracted_references": ["73STATE93410"],
          "message_preview": "..."}
 """
@@ -25,317 +24,173 @@ import sys
 from collections import defaultdict
 from datetime import datetime
 
-from rebulk import Rebulk
-
 _src_dir = os.path.dirname(os.path.abspath(__file__))
 if _src_dir not in sys.path:
     sys.path.insert(0, _src_dir)
 
-from station_data import STATIONS, _VARIANT_TO_TARGET
+from station_data import STATIONS, _STOP_STATIONS, _SENDER_DATE_STATIONS
 
-# ── Pre-processing constants ────────────────────────────────────────────────
+# ── Station Compilation (No Wildcards, Longest Match First) ─────────────────
 
-_PREFIX_STRIP = re.compile(r"^(?:REFTEL|RETELS?|REF(?:ERENCE)?S?)\.?\s*:?\s*", re.I)
-_LETTER_PREFIX = re.compile(r"^\s*(?:\(\s*[A-Z]\s*\)\s*|[A-Z]\.\s*|[A-Z]\)\s*)+")
-_NOTAL_CLEAN = re.compile(r"\s*\(?\s*NOTAL\b\s*\)?\s*", re.I)
-_UNCLAS = re.compile(r"\bUNCLAS\s+", re.I)
-_POSSESSIVE = re.compile(r"\b' S\s+")
-_AIRGRAM_STRIP = re.compile(r"\bAIRGRAM\s+", re.I)
-_NA_RE = re.compile(r"^(?:\s*n/a\s*|\s*N/A\s*|\s*none\s*)$", re.I)
-_4DIGIT_YEAR = re.compile(r"\b(?P<y>\d{4})(?P<rest>[A-Z])")
-_RETENTION_STRIP = re.compile(r"\n\s*Retention:\s*\d+\s*$")
-_TRAILING_CLEAN = re.compile(
-    r"\s*"
-    r"(?:"
-    r"\([^()]*\)"  # parentheticals (...)
-    r"|"
-    r"[,:]?\s*(?:"
-    r"JANUARY|FEBRUARY|MARCH|APRIL|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER"
-    r"|JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC"
-    r")"
-    r"(?:\.?)\s+(?:\d{1,2},?\s*)?(?:\d{2,4})?"  # month [day] [year], e.g. JUN 73 / MARCH 21, 1973
-    r"|"
-    r"\d{6}\s*Z(?:\s+(?:"
-    r"JANUARY|FEBRUARY|MARCH|APRIL|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER"
-    r"|JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC"
-    r")"
-    r"(?:\.?)\s+(?:\d{1,2},?\s+)?\d{2,4})?"  # time Z [month year], e.g. 282233 Z APR 73
-    r"|"
-    r"\d{1,2}/\d{1,2}/(?:\d{2}|\d{4})"  # numeric date, e.g. 1/17/73
-    r")*[,.]?\s*$",
-    re.I,
+_STATIONS_MAPPING: dict[str, str] = {}
+for canonical, variants in STATIONS.items():
+    _STATIONS_MAPPING[canonical.upper()] = canonical
+    for variant in variants:
+        _STATIONS_MAPPING[variant.upper()] = canonical
+
+_VALID_STATIONS = sorted(
+    [s for s in _STATIONS_MAPPING.keys() if s not in _STOP_STATIONS], 
+    key=len, 
+    reverse=True
 )
-_DATE_FORMATS = [
-    "%d %b %Y",
-    "%d-%b-%Y %I:%M:%S %p",
-    "%d-%b-%Y",
+
+_STATIONS_REGEX_STR = r"(?P<station>" + r"|".join(re.escape(s) for s in _VALID_STATIONS) + r")"
+
+
+# ── Pipeline Stage 1: Ordered Pre-Splitting Cleanup ─────────────────────────
+
+_PREFIX_STRIP_RE = re.compile(r"^(?P<prefix>(?:REFTEL|RETELS?|REF(?:ERENCE)?S?)\.?\s*:?\s*)", re.IGNORECASE)
+
+_CLEANUP_REGEXES = [
+    # Strip list-style prefixes (e.g., "B. ", "(C) ", "D) ") and numbered lists
+    (re.compile(r"^(?P<letter_prefix>\s*(?:\(\s*[A-Za-z]\s*\)\s*|[A-Za-z]\.\s*|[A-Za-z]\)\s*)+)", re.IGNORECASE), ""),
+    (re.compile(r"^(?P<num_prefix>\d+[\).]\s*)", re.IGNORECASE), ""),
+    # Keyword/flag removal
+    (re.compile(r"(?P<na>^(?:\s*n/a\s*|\s*N/A\s*|\s*none\s*)$)", re.IGNORECASE), ""),
+    (re.compile(r"(?P<notal>\s*\(?\s*NOTAL\b\s*\)?\s*)", re.IGNORECASE), ""),
+    (re.compile(r"(?P<unclas>\bUNCLAS(?:SIFIED)?\s+)", re.IGNORECASE), ""),
+    (re.compile(r"(?P<airgram_word>\bAIRGRAM\s+)", re.IGNORECASE), ""),
+    (re.compile(r"(?P<possessive>\b'\sS\s+)", re.IGNORECASE), " "),
+    (re.compile(r"(?P<retention>\n\s*Retention:\s*\d+\s*$)", re.IGNORECASE), ""),
+    # Convert YY century variants
+    (re.compile(r"\b(?P<century>\d{2})(?P<year>\d{2})(?P<rest>[A-Z])", re.IGNORECASE), r"\g<year>\g<rest>"),
+    # Strip trailing dates, paragraph marks, and parentheticals
+    (re.compile(
+        r"(?P<trailing_misc>\s*"
+        r"(?:"
+        r"\([^()]*\)"  
+        r"|"
+        r"[,:]?\s*(?:\d{1,2}\s+)?(?:"
+        r"JANUARY|FEBRUARY|MARCH|APRIL|MAY|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER"
+        r"|JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC"
+        r")"
+        r"(?:\.?)\s+(?:\d{1,2},?\s*)?(?:\d{2,4})?"  
+        r"|"
+        r"\d{6}\s*Z(?:\s+(?:"
+        r"JANUARY|FEBRUARY|MARCH|APRIL|MAY|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER"
+        r"|JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC"
+        r")"
+        r"(?:\.?)\s+(?:\d{1,2},?\s+)?\d{2,4})?"  
+        r"|"
+        r"\d{1,2}/\d{1,2}/(?:\d{2}|\d{4})" 
+        r"|"
+        r"PARA(?:GRAPH)?\s+\d+"
+        r"|"
+        r"ITEM\s+\d+"
+        r"|"
+        r"PART\s+\d+"
+        r")*[,.:;/()]*\s*$)",
+        re.IGNORECASE,
+    ), ""),
+    # Extra explicit prefix/suffix punctuation cleanup
+    (re.compile(r"^(?P<leading_punct>[,.:;/()]\s*)", re.IGNORECASE), ""),
+    (re.compile(r"(?P<trailing_punct>[,.:;/()]\s*$)", re.IGNORECASE), ""),
 ]
 
-_TOP_FAILED = 500
 
-# ── Station lookup (O(1), no regex alternation) ────────────────────────────
+# ── Pipeline Stage 2: Splitting Delimiters ──────────────────────────────────
 
-_STATIONS: dict[str, str] = {}
-for canon in STATIONS:
-    _STATIONS[canon.upper()] = canon
-for variant, canon in _VARIANT_TO_TARGET.items():
-    _STATIONS[variant.upper()] = canon
-
-_SENDER_DATE_STATIONS = frozenset(
-    s.upper()
-    for s in [
-        "SECDEF",
-        "CINCPAC",
-        "USCINCRED",
-        "CINCUSAREUR",
-        "MACTHAI",
-        "CINCRED",
-        "USMILADREP",
-        "CINC",
-        "USCINCEUR",
-        "CINCLANT",
-        "CINCPACFLT",
-        "CINCLANTFLT",
-        "CINCUNC",
-        "USCINCEC",
-        "KIRTLAND",
-        "KIRTLAND AFB MSG",
-        "SS GERMANY",
-        "SS",
-        "CINCUSNAVEUR",
-        "CINCPACREP",
-        "CINCSAC",
-        "CINCAD",
-        "CINCNORAD",
-        "BNDD",
-        "DIA",
-        "INS",
-        "USPHS",
-        "FAA",
-        "USIA",
-        "AGRICULTURE",
-        "TOSEC",
-        "SECSTATE",
-    ]
+_REF_NON_SEP_WORDS = (
+    "JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC|"
+    "JANUARY|FEBRUARY|MARCH|APRIL|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER|"
+    "DATED|PARA|ITEM|SECTION|PAGE|SUBJECT|AND|THE|OF|FOR|TO|IN|BY|WITH|NOT|PREVIOUS|"
+    "SUMMARY|BEGIN|END|PART|NOTE"
 )
 
-_STOP_STATIONS = frozenset(
-    s.upper()
-    for s in [
-        "DATED",
-        "DATE",
-        "NUMBER",
-        "NBR",
-        "REFERENCE",
-        "REF",
-        "REFTEL",
-        "PAGE",
-        "PAGES",
-        "SECTION",
-        "CLASSIFIED",
-        "UNCLASSIFIED",
-        "SECRET",
-        "CONFIDENTIAL",
-        "SENSITIVE",
-        "NOTAL",
-        "EXDIS",
-        "NODIS",
-        "STADIS",
-        "PART",
-        "SECT",
-        "ITEM",
-        "NOTE",
-        "JANUARY",
-        "FEBRUARY",
-        "MARCH",
-        "APRIL",
-        "MAY",
-        "JUNE",
-        "JULY",
-        "AUGUST",
-        "SEPTEMBER",
-        "OCTOBER",
-        "NOVEMBER",
-        "DECEMBER",
-        "JAN",
-        "FEB",
-        "MAR",
-        "APR",
-        "JUN",
-        "JUL",
-        "AUG",
-        "SEP",
-        "OCT",
-        "NOV",
-        "DEC",
-        "MONDAY",
-        "TUESDAY",
-        "WEDNESDAY",
-        "THURSDAY",
-        "FRIDAY",
-        "SATURDAY",
-        "SUNDAY",
-    ]
-)
+# Every regex MUST have exactly 1 named capture group so we can reliably slice 
+# the re.split array using [::2] to ignore delimiters entirely.
+_SPLIT_REGEXES = [
+    re.compile(r"(?P<sep_semi>;\s*)", re.IGNORECASE),
+    re.compile(r"(?P<sep_and>\s+(?:AND|&)\s+)", re.IGNORECASE),
+    # Splits "B. STATE 105386" ensuring at least a 2-char station follows
+    re.compile(r"(?P<sep_letter>[,:;.]?\s+(?:[A-Z]\.\s*|[A-Z]\s*\.\s*|[A-Z]\)\s+|\([A-Z]\)\s+)(?=[A-Z]{2,}))", re.IGNORECASE),
+    re.compile(r"(?P<sep_colon>:\s+(?=(?:\d{2}\s+)?[A-Z]{3}))", re.IGNORECASE),
+    re.compile(r"(?P<sep_comma>,\s+(?=(?:\d{2}\s+)?(?!(?:" + _REF_NON_SEP_WORDS + r"))[A-Z]{3}))", re.IGNORECASE),
+]
 
-# ── Utility functions ──────────────────────────────────────────────────────
+_CONT_TEXT_RE = re.compile(r"^\s{2,}\S")
+_NEW_REF_RE = re.compile(r"^\s{2,}(?:(?:[A-Z][\).]|\([A-Z]\))\s|[A-Z]\.\s)")
 
 
-def _clean_year(y: str) -> str:
-    return y[-2:]
+# ── Pipeline Stage 3: Precise Final Matches (^...$) ─────────────────────────
+
+_DOC_PATTERN = re.compile(r"^(?P<year>\d{2})[\s-]*" + _STATIONS_REGEX_STR + r"[\s-]*0*(?P<number>\d+)$", re.IGNORECASE)
+
+# Uses [\s-]* to cleanly accommodate missing spaces or hyphens (e.g. "BA-4301" or "BAMAKO A-50")
+_MRN_PATTERNS = [
+    # 1. Full MRN with Year and Airgram indicator
+    re.compile(r"^(?P<year>\d{2})[\s-]*" + _STATIONS_REGEX_STR + r"[\s-]*(?P<airgram>-?A|AIRGRAM)[\s-]*(?P<number>\d{1,10})$", re.IGNORECASE),
+    # 2. Full MRN with Year, no Airgram
+    re.compile(r"^(?P<year>\d{2})[\s-]*" + _STATIONS_REGEX_STR + r"[\s-]*(?P<number>\d{1,10})$", re.IGNORECASE),
+    # 3. No Year, Airgram indicator
+    re.compile(r"^" + _STATIONS_REGEX_STR + r"[\s-]*(?P<airgram>-?A|AIRGRAM)[\s-]*(?P<number>\d{1,10})$", re.IGNORECASE),
+    # 4. No Year, no Airgram
+    re.compile(r"^" + _STATIONS_REGEX_STR + r"[\s-]*(?P<number>\d{1,10})$", re.IGNORECASE),
+]
 
 
-def _extract_year_from_date(date_str: str) -> str:
+# ── Core Functions ─────────────────────────────────────────────────────────
+
+def _parse_document_date(date_str: str) -> tuple[str, str]:
     text = date_str.strip()
-    for fmt in _DATE_FORMATS:
+    if not text:
+        return "", ""
+    
+    formats = [
+        "%d %b %Y",
+        "%d-%b-%Y %I:%M:%S %p",
+        "%d-%b-%Y"
+    ]
+    
+    for fmt in formats:
         try:
-            return datetime.strptime(text, fmt).strftime("%y")
+            dt = datetime.strptime(text, fmt)
+            iso_date = dt.strftime("%Y-%m-%dT%H:%M:%S") if "%I" in fmt else dt.strftime("%Y-%m-%d")
+            doc_year = dt.strftime("%y")
+            return iso_date, doc_year
         except ValueError:
             continue
-    return ""
-
+            
+    return text, ""
 
 def _clean_number(n: str) -> str:
     n = n.lstrip("0")
     return n if n else "0"
-
 
 def _format_canonical(year: str, station: str, number: str, is_airgram: bool) -> str:
     if is_airgram:
         return f"{year}{station}-A{number}"
     return f"{year}{station}{number}"
 
-
-def _preprocess(ref: str) -> str | None:
-    if not ref:
-        return None
-    text = ref.strip()
+def _preprocess_text(text: str) -> str | None:
     if not text:
         return None
-    if _NA_RE.match(text):
-        return None
-    text = _PREFIX_STRIP.sub("", text).strip()
-    text = _NOTAL_CLEAN.sub("", text).strip()
-    text = _UNCLAS.sub("", text).strip()
-    text = _LETTER_PREFIX.sub("", text).strip()
-    text = _POSSESSIVE.sub(" ", text)
-    text = _AIRGRAM_STRIP.sub("", text).strip()
-    text = _4DIGIT_YEAR.sub(lambda m: m.group("y")[2:] + m.group("rest"), text)
-    return text.strip() or None
-
-
-def _preprocess_attr(attr_ref: str) -> str | None:
-    """Preprocess an attr_reference string (single ref, no splitting)."""
-    if not attr_ref:
-        return None
-    text = attr_ref.strip()
-    if not text:
-        return None
-    if _NA_RE.match(text):
-        return None
-    text = _RETENTION_STRIP.sub("", text)
-    text = text.strip()
-    if not text:
-        return None
-    return _preprocess(text)
-
-
-# ── Reference splitting (moved from src/patterns/ref_line.py) ──────────────
-
-_NEW_REF_RE = re.compile(r"^\s{2,}(?:(?:[A-Z][\).]|\([A-Z]\))\s|[A-Z]\.\s)")
-_CONT_TEXT_RE = re.compile(r"^\s{2,}\S")
-
-
-_REF_SEP_AND = re.compile(r"\s+(?:AND|&)\s+", re.I)
-_REF_SEP_LETTER = re.compile(
-    r"[,:]?\s+(?:"
-    r"[A-Z]\.\s*"  # B. (no space after dot)
-    r"|[A-Z]\s*\.\s*"  # B . (space before dot)
-    r"|[A-Z]\)\s+"  # B)
-    r"|\([A-Z]\)\s+"  # (B)
-    r")(?=[A-Z]{3})",
-    re.I,
-)
-_REF_SEP_COLON = re.compile(r":\s+(?=(?:\d{2}\s+)?[A-Z]{3})")
-_REF_NON_SEP = (
-    "(?:"
-    + "|".join(
-        [
-            "JAN",
-            "FEB",
-            "MAR",
-            "APR",
-            "MAY",
-            "JUN",
-            "JUL",
-            "AUG",
-            "SEP",
-            "OCT",
-            "NOV",
-            "DEC",
-            "JANUARY",
-            "FEBRUARY",
-            "MARCH",
-            "APRIL",
-            "JUNE",
-            "JULY",
-            "AUGUST",
-            "SEPTEMBER",
-            "OCTOBER",
-            "NOVEMBER",
-            "DECEMBER",
-            "DATED",
-            "PARA",
-            "ITEM",
-            "SECTION",
-            "PAGE",
-            "SUBJECT",
-            "AND",
-            "THE",
-            "OF",
-            "FOR",
-            "TO",
-            "IN",
-            "BY",
-            "WITH",
-            "NOT",
-            "PREVIOUS",
-            "SUMMARY",
-            "BEGIN",
-            "END",
-            "PART",
-            "NOTE",
-        ]
-    )
-    + ")"
-)
-_REF_SEP_COMMA = re.compile(
-    r",\s+(?=(?:\d{2}\s+)?(?!" + _REF_NON_SEP + r")[A-Z]{3})", re.I
-)
-_REF_NUM_PREFIX = re.compile(r"^\d+[\).]\s*")
-
+    cleaned = text.strip()
+    for pattern, substitution in _CLEANUP_REGEXES:
+        cleaned = pattern.sub(substitution, cleaned)
+    return cleaned.strip() or None
 
 def _split_refs(text: str) -> list[str]:
-    """Split raw reference text into individual reference strings.
-
-    Handles multi-line continuation patterns and in-line separators
-    (AND, &, semicolons, comma/colon between station+number pairs,
-    letter-prefix markers, numbered lists).
-
-    Input is the raw text from ``_reference``, which may include the
-    ``REF:`` keyword and continuation lines.
-    """
+    """Split raw reference text into discrete, fully cleaned tokens."""
     if not text:
         return []
-    text = text.strip()
-    if not text:
-        return []
-    text = _PREFIX_STRIP.sub("", text).strip()
-    if not text:
+    
+    # Run the general REFTEL strip before line continuations
+    cleaned_initial = _PREFIX_STRIP_RE.sub("", text).strip()
+    if not cleaned_initial:
         return []
 
-    # Line-by-line continuation handling (mirrors original ParseRef logic)
-    lines = text.split("\n")
+    lines = cleaned_initial.split("\n")
     initial: list[str] = []
     for i, line in enumerate(lines):
         stripped = line.strip()
@@ -350,191 +205,72 @@ def _split_refs(text: str) -> list[str]:
         else:
             initial.append(stripped)
 
-    # In-line separator splitting
-    items: list[str] = []
-    for item in initial:
-        for part in item.split(";"):
-            for sub_and in _REF_SEP_AND.split(part):
-                for sub_letter in _REF_SEP_LETTER.split(sub_and):
-                    for sub_colon in _REF_SEP_COLON.split(sub_letter):
-                        for sub_comma in _REF_SEP_COMMA.split(sub_colon):
-                            sub_comma = sub_comma.strip()
-                            sub_comma = _REF_NUM_PREFIX.sub("", sub_comma)
-                            if sub_comma:
-                                items.append(sub_comma)
-    return items
+    items: list[str] = initial
+    for pattern in _SPLIT_REGEXES:
+        new_items = []
+        for item in items:
+            pieces = pattern.split(item)
+            # Re.split with 1 capturing group returns [val, delimiter, val]
+            # [::2] securely extracts ONLY the values, eliminating delimiter leakage
+            for sub_item in pieces[::2]:
+                sub_item = sub_item.strip()
+                if sub_item:
+                    new_items.append(sub_item)
+        items = new_items
 
+    # Process all parsed splits through the rigorous cleanup stage
+    final_items = []
+    for item in items:
+        cleaned = _preprocess_text(item)
+        if cleaned:
+            final_items.append(cleaned)
 
-# ── MRN parsing (no regex station matching) ────────────────────────────────
+    return final_items
 
+def _match_mrn(text: str, doc_year: str) -> tuple[str, bool] | None:
+    """Run text against precision MRN patterns."""
+    for pattern in _MRN_PATTERNS:
+        match = pattern.match(text)
+        if match:
+            group_dict = match.groupdict()
+            year = group_dict.get("year") or doc_year
+            raw_station = group_dict.get("station", "").upper()
+            number = _clean_number(group_dict.get("number", ""))
+            is_airgram = "airgram" in group_dict and group_dict["airgram"] is not None
 
-def _parse_single_ref(text: str, doc_year: str) -> tuple[str, bool] | None:
-    """Parse a cleaned reference string into (mrn, is_airgram)."""
-    tlen = len(text)
-    if tlen < 4:
-        return None
-
-    year = ""
-    idx = 0
-    if tlen >= 2 and text[0:2].isdigit():
-        if tlen == 2 or not text[2].isdigit():
-            year = text[0:2]
-            idx = 2
-            while idx < tlen and text[idx] in " \t":
-                idx += 1
-
-    if not year:
-        year = doc_year
-
-    num_end = tlen
-    while num_end > 0 and not text[num_end - 1].isdigit():
-        num_end -= 1
-    if num_end == 0:
-        return None
-    num_start = num_end
-    while (
-        num_start > 0 and text[num_start - 1].isdigit() and (num_end - num_start) < 10
-    ):
-        num_start -= 1
-    if num_end - num_start < 1:
-        return None
-
-    raw_number = text[num_start:num_end]
-
-    is_airgram = False
-    station_end = num_start
-    if (
-        station_end >= 3
-        and text[station_end - 1] == "-"
-        and text[station_end - 2].upper() == "A"
-        and text[station_end - 3] in " \t"
-    ):
-        station_end -= 2
-        is_airgram = True
-    elif (
-        station_end >= 2
-        and text[station_end - 1].upper() == "A"
-        and text[station_end - 2] in " \t"
-    ):
-        station_end -= 1
-        is_airgram = True
-
-    raw_station = text[idx:station_end].strip()
-    while raw_station and not raw_station[-1].isalpha():
-        raw_station = raw_station[:-1]
-    if not raw_station:
-        return None
-    if not all(c.isalpha() or c in " \t" for c in raw_station):
-        return None
-
-    raw_station_upper = raw_station.upper()
-
-    if raw_station_upper in _STOP_STATIONS:
-        return None
-
-    canonical = _STATIONS.get(raw_station_upper)
-
-    # Fallback: if station not found but ends with A, try without trailing A as airgram
-    if canonical is None and len(raw_station) > 3 and raw_station_upper[-1] == "A":
-        stripped = raw_station_upper[:-1].rstrip()
-        if stripped not in _STOP_STATIONS:
-            canonical = _STATIONS.get(stripped)
-            if canonical is not None:
-                is_airgram = True
-
-    if canonical is None:
-        return None
-
-    # Reject sender-date format (6+ digit DDHHMM time) for command/agency stations
-    if len(raw_number) >= 6 and raw_station_upper in _SENDER_DATE_STATIONS:
-        return None
-
-    number = _clean_number(raw_number)
-    mrn = _format_canonical(year, canonical, number, is_airgram)
-    return (mrn, is_airgram)
-
-
-# ── Rebulk functional pattern ──────────────────────────────────────────────
-
-
-def _batch_match(input_string: str, context: dict) -> list[dict] | None:
-    """Rebulk functional pattern: extract MRNs from batched ref strings.
-
-    Each line in the batch has format::
-
-        doc_idx<tab>doc_year<tab>single_ref_text
-
-    Each line represents exactly one pre-split reference.
-    """
-    results = []
-    for raw_line in input_string.split("\n"):
-        stripped = raw_line.strip()
-        if not stripped:
-            continue
-        parts = stripped.split("\t", 2)
-        if len(parts) < 3:
-            continue
-        doc_idx, doc_year, text = parts[0], parts[1], parts[2]
-
-        text = _NOTAL_CLEAN.sub("", text).strip()
-        text = _TRAILING_CLEAN.sub("", text).strip()
-        if not text:
-            continue
-        result = _parse_single_ref(text, doc_year)
-        if result:
-            mrn, is_airgram = result
-            results.append(
-                {
-                    "start": 0,
-                    "end": 1,
-                    "name": "mrn",
-                    "value": mrn,
-                    "tags": [
-                        f"doc={doc_idx}",
-                        "airgram" if is_airgram else "cable",
-                    ],
-                }
-            )
-        elif context and "_failed_refs" in context:
-            context["_failed_refs"].append(text[:120])
-    return results if results else None
-
-
-def _build_rebulk() -> Rebulk:
-    r = Rebulk(default_rules=False)
-    r.functional(_batch_match, name="mrn", properties={"mrn": [None]})
-    return r
-
-
-# ── Document number normalization (simple regex, no rebulk) ────────────────
-
-_RE_DOC_NUMBER = re.compile(r"(?P<year>\d{2})(?P<station>[A-Z]{3,80})0*(?P<number>\d+)")
-
+            if len(group_dict.get("number", "")) >= 6 and raw_station in _SENDER_DATE_STATIONS:
+                return None
+            
+            canonical_station = _STATIONS_MAPPING.get(raw_station)
+            if not canonical_station:
+                return None
+                
+            mrn = _format_canonical(year, canonical_station, number, is_airgram)
+            return (mrn, is_airgram)
+    return None
 
 def _normalize_doc_number(doc_number: str) -> str | None:
     if not doc_number:
         return None
-    cleaned = _preprocess(doc_number)
+    cleaned = _preprocess_text(doc_number)
     if not cleaned:
         return None
-    m = _RE_DOC_NUMBER.search(cleaned)
-    if not m:
+        
+    match = _DOC_PATTERN.match(cleaned)
+    if not match:
         return None
-    raw_station = m.group("station")
-    canonical = _STATIONS.get(raw_station.upper())
+    
+    canonical = _STATIONS_MAPPING.get(match.group("station").upper())
     if not canonical:
         return None
-    year = _clean_year(m.group("year"))
-    number = _clean_number(m.group("number"))
-    return f"{year}{canonical}{number}"
+        
+    return f"{match.group('year')}{canonical}{_clean_number(match.group('number'))}"
 
+# ── Coverage Tracking ──────────────────────────────────────────────────────
 
-# ── Coverage tracking ──────────────────────────────────────────────────────
-
+_TOP_FAILED = 500
 
 class CoverageTracker:
-    """Tracks normalization coverage and collects failure samples."""
-
     def __init__(self):
         self.total_docs = 0
         self.total_refs = 0
@@ -553,9 +289,7 @@ class CoverageTracker:
         if match_count > 0:
             self.docs_with_matches += 1
 
-    def record_refs(
-        self, total: int, matched: int, skipped_docs: int, cables: int, airgrams: int
-    ):
+    def record_refs(self, total: int, matched: int, skipped_docs: int, cables: int, airgrams: int):
         self.total_refs += total
         self.matched_refs += matched
         self.skipped_docs += skipped_docs
@@ -567,64 +301,32 @@ class CoverageTracker:
             self.failed_refs.append(ref_text[:120])
 
     def print_report(self, source_files: list[str], output_path: str | None):
-        def pct(n):
-            return (n / self.total_refs * 100) if self.total_refs else 0.0
-
-        def pct_doc(n):
-            return (n / self.total_docs * 100) if self.total_docs else 0.0
+        def pct(n): return (n / self.total_refs * 100) if self.total_refs else 0.0
+        def pct_doc(n): return (n / self.total_docs * 100) if self.total_docs else 0.0
 
         sys.stderr.write("=== Reference Normalization Coverage ===\n")
         sys.stderr.write(f"Source files:            {' '.join(source_files)}\n")
         sys.stderr.write(f"Output:                  {output_path or 'stdout'}\n")
         sys.stderr.write(f"Total documents:         {self.total_docs:,}\n")
-        sys.stderr.write(
-            f"  with refs:             {self.docs_with_refs:,}  ({pct_doc(self.docs_with_refs):.2f}%)\n"
-        )
-        sys.stderr.write(
-            f"  with matches:          {self.docs_with_matches:,}  ({pct_doc(self.docs_with_matches):.2f}%)\n"
-        )
-        sys.stderr.write(
-            f"  no ref (null/NA):      {self.skipped_docs:,}  ({pct_doc(self.skipped_docs):.2f}%)\n"
-        )
+        sys.stderr.write(f"  with refs:             {self.docs_with_refs:,}  ({pct_doc(self.docs_with_refs):.2f}%)\n")
+        sys.stderr.write(f"  with matches:          {self.docs_with_matches:,}  ({pct_doc(self.docs_with_matches):.2f}%)\n")
+        sys.stderr.write(f"  no ref (null/NA):      {self.skipped_docs:,}  ({pct_doc(self.skipped_docs):.2f}%)\n")
         sys.stderr.write(f"Total ref parts:         {self.total_refs:,}\n")
-        sys.stderr.write(
-            f"  matched:               {self.matched_refs:,}  ({pct(self.matched_refs):.2f}%)\n"
-        )
+        sys.stderr.write(f"  matched:               {self.matched_refs:,}  ({pct(self.matched_refs):.2f}%)\n")
+        
         failed = self.total_refs - self.matched_refs
         sys.stderr.write(f"  failed (no match):     {failed:,}  ({pct(failed):.2f}%)\n")
-        sys.stderr.write(
-            f"  cables:                {self.cable_count:,}  ({pct(self.cable_count):.2f}%)\n"
-        )
-        sys.stderr.write(
-            f"  airgrams:              {self.airgram_count:,}  ({pct(self.airgram_count):.2f}%)\n"
-        )
+        sys.stderr.write(f"  cables:                {self.cable_count:,}  ({pct(self.cable_count):.2f}%)\n")
+        sys.stderr.write(f"  airgrams:              {self.airgram_count:,}  ({pct(self.airgram_count):.2f}%)\n")
 
         if self.failed_refs:
-            sys.stderr.write(
-                f"\nTop {len(self.failed_refs)} failing reference strings:\n"
-            )
+            sys.stderr.write(f"\nTop {len(self.failed_refs)} failing reference strings:\n")
             for i, fr in enumerate(self.failed_refs):
                 sys.stderr.write(f"  {i + 1:>6,}  {fr!r}\n")
 
-
-# ── Input reading ──────────────────────────────────────────────────────────
-
+# ── Input Handling & Main ──────────────────────────────────────────────────
 
 def read_reftel(path: str):
-    """Yield (doc_number, date, attr_reference, ref_list, message_preview)
-    from a flattened reftel NDJSON file.
-
-    ``ref_list`` is the pre-split ``references`` field (list from ``_reference``, or None).
-    ``attr_reference`` is the raw attribute string (fallback).
-    ``message_preview`` is the first 100 lines of ``_message_content`` (string, or None).
-
-    Generated from full extractor output via::
-
-        jq -Mc '{"references": ._reference, "attr_reference": ."Message Attributes"."Reference",
-                  "document_number": ."Message Attributes"."Document Number",
-                  "date": ."Message Attributes"."Draft Date" // ."Message Attributes"."Sent Date",
-                  "message_preview": (._message_content | if . then split("\\n")[:100] | join("\\n") else null end)}'
-    """
     with open(path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -641,142 +343,95 @@ def read_reftel(path: str):
             message_preview = obj.get("message_preview")
             yield doc, date, attr_ref, ref_list, message_preview
 
-
-# ── Main ───────────────────────────────────────────────────────────────────
-
-
 def main():
     if len(sys.argv) < 2:
-        sys.stderr.write(
-            "Usage: python3 -m src.reftel_normalize <file.ndjson> [...] > output.ndjson\n"
-        )
+        sys.stderr.write("Usage: python3 -m src.reftel_normalize <file.ndjson> [...] > output.ndjson\n")
         sys.exit(1)
 
     paths = sys.argv[1:]
-
     if sys.stdout.isatty():
-        sys.stderr.write(
-            "ERROR: redirect stdout to a file (e.g. ... > output.ndjson)\n"
-        )
+        sys.stderr.write("ERROR: redirect stdout to a file (e.g. ... > output.ndjson)\n")
         sys.exit(1)
+    
     out = sys.stdout
-
-    rebulk = _build_rebulk()
     coverage = CoverageTracker()
 
     for path in paths:
         sys.stderr.write(f"Processing {path} ...\n")
-
-        docs: list[tuple[str, str, str | None]] = []
-        batch_lines: list[str] = []
-        batch_ref_counts: list[int] = []
-
-        for doc_number, doc_date, attr_ref, ref_list, message_preview in read_reftel(
-            path
-        ):
-            doc_idx = len(docs)
-            docs.append((doc_number, doc_date, message_preview))
-
-            doc_year = _extract_year_from_date(doc_date)
-
-            if ref_list and isinstance(ref_list, list):
-                cleaned = [_preprocess(str(r)) for r in ref_list]
-                cleaned = [c for c in cleaned if c]
-                if cleaned:
-                    for c in cleaned:
-                        batch_lines.append(f"{doc_idx}\t{doc_year}\t{c}")
-                    batch_ref_counts.append(len(cleaned))
-                    continue
-
-            if isinstance(ref_list, str):
-                split_items = _split_refs(ref_list)
-                cleaned = [_preprocess(r) for r in split_items]
-                cleaned = [c for c in cleaned if c]
-                if cleaned:
-                    for c in cleaned:
-                        batch_lines.append(f"{doc_idx}\t{doc_year}\t{c}")
-                    batch_ref_counts.append(len(cleaned))
-                    continue
-
-            cleaned = _preprocess_attr(attr_ref)
-            if cleaned:
-                batch_lines.append(f"{doc_idx}\t{doc_year}\t{cleaned}")
-                batch_ref_counts.append(1)
-            else:
-                batch_ref_counts.append(0)
-
-        failed_refs: list[str] = []
-
-        if batch_lines:
-            batch_text = "\n".join(batch_lines)
-            context = {"_failed_refs": failed_refs}
-            all_matches = rebulk.matches(batch_text, context=context)
-
-            # Group matches by document index
-            doc_mrns: dict[int, list[str]] = defaultdict(list)
-            doc_cables: dict[int, int] = defaultdict(int)
-            doc_airgrams: dict[int, int] = defaultdict(int)
-            for m in all_matches:
-                doc_idx = -1
-                for tag in m.tags:
-                    if tag.startswith("doc="):
-                        doc_idx = int(tag[4:])
-                    elif tag == "cable":
-                        doc_cables[doc_idx] += 1
-                    elif tag == "airgram":
-                        doc_airgrams[doc_idx] += 1
-                if doc_idx >= 0:
-                    doc_mrns[doc_idx].append(m.value)
-        else:
-            doc_mrns = {}
-            doc_cables = {}
-            doc_airgrams = {}
-
-        # Output per document
+        
         total_ref_parts = 0
         total_matched = 0
         total_skipped_docs = 0
         total_cables = 0
         total_airgrams = 0
 
-        for i, (doc_number, doc_date, message_preview) in enumerate(docs):
-            normalized = doc_mrns.get(i, [])
-            ref_parts = batch_ref_counts[i]
+        for doc_number, doc_date, attr_ref, ref_list, message_preview in read_reftel(path):
+            iso_date, doc_year = _parse_document_date(doc_date)
+            
+            # Stage 1: Gather EVERYTHING for rigorous splitting
+            raw_tokens = []
+            if ref_list:
+                if isinstance(ref_list, list):
+                    for r in ref_list:
+                        raw_tokens.extend(_split_refs(str(r)))
+                elif isinstance(ref_list, str):
+                    raw_tokens.extend(_split_refs(ref_list))
+                    
+            if attr_ref:
+                raw_tokens.extend(_split_refs(str(attr_ref)))
 
-            if ref_parts > 0:
-                total_ref_parts += ref_parts
-            else:
+            # Stage 2: Deduplicate cleanly parsed tokens to match against
+            seen = set()
+            tokens_to_match = []
+            for token in raw_tokens:
+                if token and token not in seen:
+                    seen.add(token)
+                    tokens_to_match.append(token)
+
+            ref_count = len(tokens_to_match)
+            if ref_count == 0:
                 total_skipped_docs += 1
+            else:
+                total_ref_parts += ref_count
 
-            total_matched += len(normalized)
-            total_cables += doc_cables.get(i, 0)
-            total_airgrams += doc_airgrams.get(i, 0)
+            # Stage 3: Match against Anchored Pattern
+            extracted_mrns = []
+            doc_cable_count = 0
+            doc_airgram_count = 0
+            
+            for token in tokens_to_match:
+                result = _match_mrn(token, doc_year)
+                if result:
+                    mrn, is_airgram = result
+                    extracted_mrns.append(mrn)
+                    if is_airgram:
+                        doc_airgram_count += 1
+                    else:
+                        doc_cable_count += 1
+                else:
+                    coverage.record_failed(token)
 
-            coverage.record_doc(ref_parts, len(normalized))
-
+            total_matched += len(extracted_mrns)
+            total_cables += doc_cable_count
+            total_airgrams += doc_airgram_count
+            
+            coverage.record_doc(ref_count, len(extracted_mrns))
             doc_number_norm = _normalize_doc_number(doc_number)
-            result = {
+            
+            result_doc = {
                 "document_number": doc_number_norm or doc_number,
-                "date": doc_date,
-                "extracted_references": normalized if normalized else None,
+                "date": iso_date,
+                "extracted_references": extracted_mrns if extracted_mrns else None,
             }
             if message_preview:
-                result["message_preview"] = message_preview
-            out.write(json.dumps(result, ensure_ascii=False) + "\n")
-
-        for fr in failed_refs:
-            coverage.record_failed(fr)
+                result_doc["message_preview"] = message_preview
+            out.write(json.dumps(result_doc, ensure_ascii=False) + "\n")
 
         coverage.record_refs(
-            total_ref_parts,
-            total_matched,
-            total_skipped_docs,
-            total_cables,
-            total_airgrams,
+            total_ref_parts, total_matched, total_skipped_docs, total_cables, total_airgrams
         )
 
     coverage.print_report(paths, None)
-
 
 if __name__ == "__main__":
     main()

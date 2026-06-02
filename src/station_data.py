@@ -1,1847 +1,271 @@
 """Consolidated station name data for ACP-127 reference normalization.
 
 Single source of truth for station name variants and OCR corrections.
-Derived from the old STATION_VARIANTS + _VARIANT_TO_TARGET dicts.
 """
 
-import re
-
 STATIONS = {
-    "ABCDE": [
-        "ABCDE",
-    ],
-    "ABIDJA": [
-        "ABIDAJN",
-        "ABIDJA",
-    ],
-    "ABIDJAN": [
-        "ABIDJAN",
-        "ABIDJDAN",
-        "ABIAJDN",
-        "A IDJAN",
-    ],
-    "ABUDHABI": [
-        "ABU DHABI",
-        "ABUDHABI",
-        "ABUDH",
-        "BUDH",
-        "ADU DHABI",
-    ],
-    "ABUJA": [
-        "ABUJA",
-    ],
-    "ACAPUL": [
-        "ACAPUL",
-    ],
-    "ACCRA": [
-        "ACCRA",
-    ],
-    "ADANA": [
-        "ADANA",
-    ],
-    "ADDIS": [
-        "ADDIS",
-        "ADIS",
-    ],
-    "ADDISABABA": [
-        "ADDIS ABABA",
-        "ADDISABABA",
-    ],
-    "AIPEI": [
-        "AIPEI",
-    ],
-    "AITTA": [
-        "AITTA",
-    ],
-    "AITTAIPEI": [
-        "AITTAIPEI",
-    ],
-    "AITWA": [
-        "AITWA",
-    ],
-    "ALEXAN": [
-        "ALEXAN",
-    ],
-    "ALEXANDRIA": [
-        "ALEXANDRIA",
-    ],
-    "ALGIER": [
-        "ALGIER",
-    ],
-    "ALGIERS": [
-        "ALGIERS",
-    ],
-    "ALMATY": [
-        "ALMATY",
-    ],
-    "AMEMBASSYHANOI": [
-        "AMEMBASSYHANOI",
-    ],
-    "AMMAN": [
-        "AMMAN",
-    ],
-    "AMSTER": [
-        "AMSTER",
-    ],
-    "AMSTERDAM": [
-        "AMSTERDAM",
-    ],
-    "ANKARA": [
-        "ANKARA",
-    ],
-    "ANTANA": [
-        "ANTANA",
-    ],
-    "ANTANANARIVO": [
-        "ANTANANARIVO",
-        "TANANARIVE",
-    ],
-    "ANTWER": [
-        "ANTWER",
-        "ANTWERP",
-    ],
-    "APIA": [
-        "APIA",
-    ],
-    "AQABA": [
-        "AQABA",
-    ],
-    "ARSAW": [
-        "ARSAW",
-    ],
-    "ASHGABAT": [
-        "ASHGABAT",
-    ],
-    "ASMARA": [
-        "ASMARA",
-    ],
-    "ASTANA": [
-        "ASTANA",
-    ],
-    "ASUNCI": [
-        "ASUNCI",
-    ],
-    "ASUNCION": [
-        "ASUNCION",
-    ],
-    "ASWAN": [
-        "ASWAN",
-    ],
-    "ATHENS": [
-        "ATHENS",
-        "THENS",
-    ],
-    "ATLANT": [
-        "ATLANT",
-        "TLANT",
-    ],
-    "ATO": [
-        "ATO",
-    ],
-    "AUCKLA": [
-        "AUCKLA",
-    ],
-    "AUCKLAND": [
-        "AUCKLAND",
-    ],
-    "BAGHDA": [
-        "BAGHDA",
-    ],
-    "BAGHDAD": [
-        "BAGHADAD",
-        "BAGHDAD",
-    ],
-    "BAKU": [
-        "BAKU",
-    ],
-    "BALI": [
-        "BALI",
-    ],
-    "BAMAKO": [
-        "BAMAKO",
-    ],
-    "BANDARSERIBEGAWAN": [
-        "BANDAR SERI BEGAWAN",
-        "BANDARSERIBEGAWAN",
-    ],
-    "BANGKOK": [
-        "BANGKOK",
-        "BANGKO",
-        "BANGKOOK",
-        "ANGKOK",
-        "ANGKO",
-    ],
-    "BANGUI": [
-        "BANGUI",
-    ],
-    "BANJUL": [
-        "BANJUL",
-    ],
-    "BARCEL": [
-        "BARCEL",
-    ],
-    "BARCELONA": [
-        "BARCELONA",
-        "BACELONA",
-    ],
-    "BARRAN": [
-        "BARRAN",
-    ],
-    "BARRANQUILLA": [
-        "BARRANQUILLA",
-    ],
-    "BASRAH": [
-        "BASRAH",
-    ],
-    "BATHUR": [
-        "BATHUR",
-    ],
-    "BEIJIN": [
-        "BEIJIN",
-    ],
-    "BEIJING": [
-        "BEIJING",
-    ],
-    "BEIRUT": [
-        "BEIRUT",
-        "BEIRUTQ",
-    ],
-    "BELEM": [
-        "BELEM",
-    ],
-    "BELFAS": [
-        "BELFAS",
-    ],
-    "BELFAST": [
-        "BELFAST",
-    ],
-    "BELGRA": [
-        "BELGRA",
-    ],
-    "BELGRADE": [
-        "BELGRADE",
-    ],
-    "BELIZE": [
-        "BELIZE",
-    ],
-    "BELMOPAN": [
-        "BELMOPAN",
-    ],
-    "BERLIN": [
-        "BERLIN",
-        "ERLIN",
-    ],
-    "BERN": [
-        "BERN",
-    ],
-    "BIENH": [
-        "BIENH",
-    ],
-    "BILBAO": [
-        "BILBAO",
-    ],
-    "BISHKEK": [
-        "BISHKEK",
-    ],
-    "BISSAU": [
-        "BISSAU",
-    ],
-    "BLANTY": [
-        "BLANTY",
-    ],
-    "BLANTYRE": [
-        "BLANTYRE",
-    ],
-    "BOGOTA": [
-        "BOGOT",
-        "BOGOTA",
-    ],
-    "BOHEMI": [
-        "BOHEMI",
-    ],
-    "BOMBAY": [
-        "BOMBAY",
-    ],
-    "BONN": [
-        "BONN",
-    ],
-    "BORDEA": [
-        "BORDEA",
-    ],
-    "BORDEAUX": [
-        "BORDEAUX",
-    ],
-    "BRASIL": [
-        "BRASIL",
-    ],
-    "BRASILIA": [
-        "BRASIILIA",
-        "BRASILIA",
-    ],
-    "BRATISLAVA": [
-        "BRATISLAVA",
-    ],
-    "BRAZZA": [
-        "BRAZZA",
-    ],
-    "BRAZZAVILLE": [
-        "BRAZZAVILLE",
-    ],
-    "BREMEN": [
-        "BREMEN",
-    ],
-    "BRIDGE": [
-        "BRIDGE",
-    ],
-    "BRIDGETOWN": [
-        "BRIDGETOWN",
-        "BRIDGETOAN",
-    ],
-    "BRISBA": [
-        "BRISBA",
-    ],
-    "BRISBANE": [
-        "BRISBANE",
-    ],
-    "BRUSSE": [
-        "BRUSSE",
-    ],
-    "BRUSSELS": [
-        "BRUSSELS",
-    ],
-    "BUCHAR": [
-        "BUCHA",
-        "BUCHAR",
-    ],
-    "BUCHAREST": [
-        "BUCHAREST",
-    ],
-    "BUDAPE": [
-        "BUDAPE",
-        "BUDAPST",
-    ],
-    "BUDAPEST": [
-        "BUDAPEST",
-    ],
-    "BUENOS": [
-        "BUENOS",
-    ],
-    "BUENOSAIRES": [
-        "BA",
-        "BUENOS AIRES",
-        "BUENOS AIES",
-        "BUENOSAIRES",
-    ],
-    "BUJUMB": [
-        "BUJUMB",
-    ],
-    "BUJUMBURA": [
-        "BUJUMBURA",
-    ],
-    "BUKAVU": [
-        "BUKAVU",
-    ],
-    "CAIRO": [
-        "CAIRO",
-    ],
-    "CALCUT": [
-        "CALCUT",
-    ],
-    "CALCUTTA": [
-        "CALCUTT",
-        "CALCUTTA",
-    ],
-    "CALGAR": [
-        "CALGAR",
-    ],
-    "CALGARY": [
-        "CALGARY",
-    ],
-    "CALI": [
-        "CALI",
-    ],
-    "CANBER": [
-        "CANBER",
-    ],
-    "CANBERRA": [
-        "CANBERRA",
-    ],
-    "CANTH": [
-        "CANTH",
-    ],
-    "CAPET": [
-        "CAPET",
-    ],
-    "CAPETOWN": [
-        "CAPE TOWN",
-        "CAPETOWN",
-    ],
-    "CARACA": [
-        "CARACA",
-    ],
-    "CARACAS": [
-        "CARACACS",
-        "CARACAS",
-    ],
-    "CASABL": [
-        "CASABL",
-    ],
-    "CASABLANCA": [
-        "CASABLANCA",
-    ],
-    "CDGENEVA": [
-        "CDGENEVA",
-    ],
-    "CEBU": [
-        "CEBU",
-    ],
-    "CHENGDU": [
-        "CHENGDU",
-    ],
-    "CHENNAI": [
-        "CHENNAI",
-    ],
-    "CHIANG": [
-        "CHIANG",
-    ],
-    "CHIANGMAI": [
-        "CHIANGMAI",
-    ],
-    "CHISINAU": [
-        "CHISINAU",
-    ],
-    "CIUDAD": [
-        "CIUDAD",
-    ],
-    "CIUDADJUAREZ": [
-        "CIUDAD JUAREZ",
-        "CIUDADJUAREZ",
-    ],
-    "COCOMDOC": [
-        "COCOMDOC",
-    ],
-    "COLOMB": [
-        "COLOMB",
-    ],
-    "COLOMBO": [
-        "COLOMBO",
-    ],
-    "CONAKR": [
-        "CONAKR",
-    ],
-    "CONAKRY": [
-        "CONAKRY",
-    ],
-    "COPENH": [
-        "COPENH",
-    ],
-    "COPENHAGEN": [
-        "COPENHAGEN",
-    ],
-    "COTONO": [
-        "COTONO",
-    ],
-    "COTONOU": [
-        "COTONOU",
-    ],
-    "CRUS": [
-        "CRUS",
-    ],
-    "CURACA": [
-        "CURACA",
-    ],
-    "CURACAO": [
-        "CURACAO",
-    ],
-    "DACCA": [
-        "DACC",
-        "DACCA",
-    ],
-    "DAKAR": [
-        "DAKAR",
-    ],
-    "DAMASC": [
-        "DAMASC",
-    ],
-    "DAMASCUS": [
-        "DAMASCUS",
-    ],
-    "DANANG": [
-        "DANANG",
-    ],
-    "DARES": [
-        "DARES",
-    ],
-    "DARESSALAAM": [
-        "DAR ES SALAAM",
-        "DARESSALAAM",
-    ],
-    "DEA": [
-        "DEA",
-    ],
-    "DEAUVI": [
-        "DEAUVI",
-    ],
-    "DHAHRA": [
-        "DHAHRA",
-    ],
-    "DHAHRAN": [
-        "DHAHRAN",
-    ],
-    "DHAKA": [
-        "DHAKA",
-    ],
-    "DILI": [
-        "DILI",
-    ],
-    "DJIBOUTI": [
-        "DJIBOUTI",
-        "DJIBOU",
-    ],
-    "DOHA": [
-        "DOHA",
-    ],
-    "DORADO": [
-        "DORADO",
-    ],
-    "DOUALA": [
-        "DOUALA",
-    ],
-    "DUBAI": [
-        "DUBAI",
-    ],
-    "DUBLIN": [
-        "DUBLIIN",
-        "DUBLIN",
-        "DUBLN",
-    ],
-    "DURBAN": [
-        "DURBAN",
-    ],
-    "DUSHANBE": [
-        "DUSHANBE",
-    ],
-    "DUSSEL": [
-        "DUSSEL",
-    ],
-    "DUSSELDORF": [
-        "DUSSELDORF",
-    ],
-    "ECBRU": [
-        "ECBRU",
-    ],
-    "ECBRUSSELS": [
-        "EC BRUSSELS",
-        "ECBRUSSELS",
-    ],
-    "EDINBU": [
-        "EDINBU",
-    ],
-    "EDINBURGH": [
-        "EDINBURGH",
-    ],
-    "EFTOANKARA": [
-        "EFTOANKARA",
-    ],
-    "EFTOASMARA": [
-        "EFTOASMARA",
-    ],
-    "EFTOATHENS": [
-        "EFTOATHENS",
-    ],
-    "EFTOBAGHDAD": [
-        "EFTOBAGHDAD",
-    ],
-    "EFTOBAKU": [
-        "EFTOBAKU",
-    ],
-    "EFTOBUENOSAIRES": [
-        "EFTOBUENOSAIRES",
-    ],
-    "EFTOCARACAS": [
-        "EFTOCARACAS",
-    ],
-    "EFTOKABUL": [
-        "EFTOKABUL",
-    ],
-    "EFTOLONDON": [
-        "EFTOLONDON",
-    ],
-    "EFTOMONTEVIDEO": [
-        "EFTOMONTEVIDEO",
-    ],
-    "EFTOPORTMORESBY": [
-        "EFTOPORTMORESBY",
-    ],
-    "EFTORABAT": [
-        "EFTORABAT",
-    ],
-    "EFTOSANAA": [
-        "EFTOSANAA",
-    ],
-    "EFTOSKOPJE": [
-        "EFTOSKOPJE",
-    ],
-    "EFTOUSUNNEWYORK": [
-        "EFTOUSUNNEWYORK",
-    ],
-    "EFTOYEREVAN": [
-        "EFTOYEREVAN",
-    ],
-    "FESTTWO": [
-        "FESTTWO",
-    ],
-    "FLOREN": [
-        "FLOREN",
-    ],
-    "FLORENCE": [
-        "FLORENCE",
-    ],
-    "FORTL": [
-        "FORTL",
-    ],
-    "FRANCE": [
-        "FRANCE",
-    ],
-    "FRANKF": [
-        "FRANKF",
-    ],
-    "FRANKFURT": [
-        "FRANKFURT",
-    ],
-    "FREETO": [
-        "FREETO",
-    ],
-    "FREETOWN": [
-        "FREETOWN",
-    ],
-    "FUKUOK": [
-        "FUKUOK",
-    ],
-    "FUKUOKA": [
-        "FUKUOKA",
-    ],
-    "GABORO": [
-        "GABORO",
-    ],
-    "GABORONE": [
-        "GABORONE",
-    ],
-    "GENEVA": [
-        "GENEA",
-        "GENEFA",
-        "GENEVA",
-        "ENEVA",
-    ],
-    "GENOA": [
-        "GENOA",
-    ],
-    "GEORGE": [
-        "GEORGE",
-    ],
-    "GEORGETOWN": [
-        "GEORGETOWN",
-    ],
-    "GOTEBO": [
-        "GOTEBO",
-    ],
-    "GOTEBORG": [
-        "GOTEBORG",
-    ],
-    "GRENAD": [
-        "GRENAD",
-    ],
-    "GRENADA": [
-        "GRENADA",
-    ],
-    "GUADAL": [
-        "GUADAL",
-    ],
-    "GUADALAJARA": [
-        "GUADALAJARA",
-    ],
-    "GUANGZHOU": [
-        "GUANGZHOU",
-    ],
-    "GUATEM": [
-        "GUATEM",
-    ],
-    "GUATEMALA": [
-        "GUATEMALA",
-    ],
-    "GUAYAQ": [
-        "GUAYAQ",
-    ],
-    "GUAYAQUIL": [
-        "GUAYAQUIL",
-    ],
-    "HALIFA": [
-        "HALIFA",
-    ],
-    "HALIFAX": [
-        "HALIFAX",
-    ],
-    "HAMBUR": [
-        "HAMBUR",
-    ],
-    "HAMBURG": [
-        "HAMBURG",
-    ],
-    "HAMILT": [
-        "HAMILT",
-    ],
-    "HAMILTON": [
-        "HAMILTON",
-    ],
-    "HANOI": [
-        "HANOI",
-    ],
-    "HARARE": [
-        "HARARE",
-    ],
-    "HAVANA": [
-        "HAVANA",
-    ],
-    "HELSIN": [
-        "HELSIN",
-    ],
-    "HELSINKI": [
-        "HELSINKI",
-    ],
-    "HERMOS": [
-        "HERMOS",
-    ],
-    "HERMOSILLO": [
-        "HERMOSILLO",
-    ],
-    "HILLAH": [
-        "HILLAH",
-    ],
-    "HOCHIMINHCITY": [
-        "HO CHI MINH CITY",
-        "HOCHIMINHCITY",
-    ],
-    "HONGK": [
-        "HONGK",
-    ],
-    "HONGKONG": [
-        "HONG KONG",
-        "HONGKONG",
-    ],
-    "HOUSTO": [
-        "HOUSTO",
-    ],
-    "HYDERABAD": [
-        "HYDERABAD",
-    ],
-    "IAEAV": [
-        "IAEA",
-        "IAEAV",
-    ],
-    "IAEAVIENNA": [
-        "IAEAVIENNA",
-    ],
-    "IBADAN": [
-        "IBADAN",
-    ],
-    "IENNA": [
-        "IENNA",
-    ],
-    "IRANRPODUBAI": [
-        "IRANRPODUBAI",
-    ],
-    "ISFAHA": [
-        "ISFAHA",
-        "ISFAHAN",
-    ],
-    "ISLAMA": [
-        "ISLAMA",
-    ],
-    "ISLAMABAD": [
-        "ISLAMABAD",
-    ],
-    "ISO": [
-        "ISO",
-    ],
-    "ISTANB": [
-        "ISTANB",
-    ],
-    "ISTANBUL": [
-        "ISTANBUL",
-    ],
-    "IZMIR": [
-        "IZMIR",
-    ],
-    "JAKART": [
-        "JAKART",
-    ],
-    "JAKARTA": [
-        "JAKARTA",
-    ],
-    "JECPA": [
-        "JECPA",
-    ],
-    "JEDDAH": [
-        "JEDDAH",
-    ],
-    "JERUSA": [
-        "JERUSA",
-    ],
-    "JERUSALEM": [
-        "JERUSALEM",
-        "JERUSALEMO",
-    ],
-    "JIDDA": [
-        "JIDDA",
-    ],
-    "JOHANN": [
-        "JOHANN",
-    ],
-    "JOHANNESBURG": [
-        "JOHANNESBURG",
-    ],
-    "KABUL": [
-        "KABUL",
-    ],
-    "KADUNA": [
-        "KADUNA",
-    ],
-    "KAMPAL": [
-        "KAMPAL",
-    ],
-    "KAMPALA": [
-        "KAMPALA",
-    ],
-    "KARACH": [
-        "KARACH",
-    ],
-    "KARACHI": [
-        "KARACHI",
-    ],
-    "KATHMA": [
-        "KATHMA",
-    ],
-    "KATHMANDU": [
-        "KATHAMNDU",
-        "KATHMANDU",
-    ],
-    "KHARTO": [
-        "KHARTO",
-        "KHARTOM",
-    ],
-    "KHARTOUM": [
-        "KHARTOUM",
-    ],
-    "KHORRA": [
-        "KHORRA",
-    ],
-    "KIEV": [
-        "KIEV",
-    ],
-    "KIGALI": [
-        "KIGALI",
-    ],
-    "KINGST": [
-        "KINGSON",
-        "KINGST",
-    ],
-    "KINGSTON": [
-        "KINGSTON",
-    ],
-    "KINSHA": [
-        "KINSHA",
-        "KINSHSA",
-    ],
-    "KINSHASA": [
-        "KINSHAS",
-        "KINSHASA",
-        "KINSHASAC",
-    ],
-    "KIRKUK": [
-        "KIRKUK",
-    ],
-    "KISANG": [
-        "KISANG",
-    ],
-    "KOLKATA": [
-        "KOLKATA",
-    ],
-    "KOLONIA": [
-        "KOLONIA",
-    ],
-    "KOROR": [
-        "KOROR",
-    ],
-    "KRAKOW": [
-        "KRAKOW",
-    ],
-    "KUALA": [
-        "KUALA",
-    ],
-    "KUALALUMPUR": [
-        "KUALA LUMPUR",
-        "KUALALUMPUR",
-    ],
-    "KUWAIT": [
-        "KUWAIT",
-    ],
-    "KYIV": [
-        "KYIV",
-    ],
-    "KYOTO": [
-        "KYOTO",
-    ],
-    "LAGOS": [
-        "LAGOGS",
-        "LAGOS",
-    ],
-    "LAHORE": [
-        "LAHORE",
-    ],
-    "LAPAZ": [
-        "LA PAZ",
-        "LAPAZ",
-    ],
-    "LEIPZIG": [
-        "LEIPZIG",
-    ],
-    "LENING": [
-        "LENING",
-    ],
-    "LIBREV": [
-        "LIBREV",
-    ],
-    "LIBREVILLE": [
-        "LIBREVILLE",
-    ],
-    "LILONG": [
-        "LILONG",
-    ],
-    "LILONGWE": [
-        "LILONGWE",
-    ],
-    "LIMA": [
-        "LIMA",
-    ],
-    "LISBON": [
-        "LISBO",
-        "LISBON",
-    ],
-    "LIVERP": [
-        "LIVERP",
-    ],
-    "LJUBLJANA": [
-        "LJUBLJANA",
-    ],
-    "LOME": [
-        "LOME",
-    ],
-    "LONDON": [
-        "LONDON",
-    ],
-    "LOSAN": [
-        "LOSAN",
-    ],
-    "LUANDA": [
-        "LUANDA",
-    ],
-    "LUBUMB": [
-        "LUBUMB",
-    ],
-    "LUBUMBASHI": [
-        "LUBUMBASHI",
-    ],
-    "LUSAKA": [
-        "LUSAKA",
-    ],
-    "LUXEMB": [
-        "LUXEMB",
-    ],
-    "LUXEMBOURG": [
-        "LUXEMBOURG",
-    ],
-    "LYON": [
-        "LYON",
-    ],
-    "MADRAS": [
-        "MADRAS",
-    ],
-    "MADRID": [
-        "MADRID",
-    ],
-    "MAJURO": [
-        "MAJURO",
-    ],
-    "MALABO": [
-        "MALABO",
-    ],
-    "MANAGU": [
-        "MANAGU",
-    ],
-    "MANAGUA": [
-        "MANAGUA",
-    ],
-    "MANAMA": [
-        "MANAMA",
-        "MANANA",
-    ],
-    "MANILA": [
-        "MANILA",
-    ],
-    "MAPUTO": [
-        "LOURENCOMARQUES",
-        "MAPUTO",
-        "LOUREN",
-        "LOURENCO MARQUES",
-    ],
-    "MARACA": [
-        "MARACA",
-    ],
-    "MARDE": [
-        "MARDE",
-    ],
-    "MARDELPLATA": [
-        "MAR DEL PLATA",
-        "MARDELPLATA",
-    ],
-    "MARSEI": [
-        "MARSEI",
-    ],
-    "MARSEILLE": [
-        "MARSEILLE",
-    ],
-    "MARTIN": [
-        "MARTIN",
-    ],
-    "MARTINIQUE": [
-        "MARTINIQUE",
-    ],
-    "MASERU": [
-        "MASERU",
-    ],
-    "MATAMO": [
-        "MATAMO",
-    ],
-    "MATAMOROS": [
-        "MATAMOROS",
-    ],
-    "MAZATL": [
-        "MAZATL",
-    ],
-    "MAZATLAN": [
-        "MAZATLAN",
-    ],
-    "MBABAN": [
-        "MBABAN",
-    ],
-    "MBABANE": [
-        "MBABANE",
-    ],
-    "MBFRV": [
-        "MBFRV",
-    ],
-    "MEDAN": [
-        "MEDAN",
-    ],
-    "MEDELL": [
-        "MEDELL",
-    ],
-    "MEDELLIN": [
-        "MEDELLIN",
-    ],
-    "MELBOU": [
-        "MELBOU",
-    ],
-    "MELBOURNE": [
-        "MELBOURNE",
-    ],
-    "MERIDA": [
-        "MERIDA",
-    ],
-    "MEXICA": [
-        "MEXICA",
-    ],
-    "MEXICO": [
-        "MEXICO",
-    ],
-    "MILAN": [
-        "MILAN",
-    ],
-    "MINSK": [
-        "MINSK",
-    ],
-    "MOGADI": [
-        "MOGADI",
-    ],
-    "MOGADISHU": [
-        "MOGADISCIO",
-        "MOGADISHU",
-    ],
-    "MONROV": [
-        "MONROV",
-    ],
-    "MONROVIA": [
-        "MONROVIA",
-    ],
-    "MONTER": [
-        "MONTER",
-    ],
-    "MONTERREY": [
-        "MONTERREY",
-    ],
-    "MONTEV": [
-        "MONTEV",
-    ],
-    "MONTEVIDEO": [
-        "MONTEVIDEO",
-    ],
-    "MONTRE": [
-        "MONTRE",
-    ],
-    "MONTREAL": [
-        "MONTREAL",
-    ],
-    "MOSCOW": [
-        "MOSCO",
-        "MOSCOE",
-        "MOSCOW",
-    ],
-    "MOSUL": [
-        "MOSUL",
-    ],
-    "MTNGE": [
-        "MTNGE",
-    ],
-    "MUMBAI": [
-        "MUMBAI",
-    ],
-    "MUNICH": [
-        "MUNICH",
-    ],
-    "MUSCAT": [
-        "MUSCAOA",
-        "MUSCAT",
-    ],
-    "NAGOYA": [
-        "NAGOYA",
-    ],
-    "NAHA": [
-        "NAHA",
-    ],
-    "NAIROB": [
-        "NAIROB",
-    ],
-    "NAIROBI": [
-        "NAIROBI",
-    ],
-    "NAPLES": [
-        "NAPLES",
-    ],
-    "NASSAU": [
-        "NASSAU",
-    ],
-    "NATO": [
-        "NATO",
-    ],
-    "NATOB": [
-        "NATOB",
-    ],
-    "NATOBRUSSELS": [
-        "NATOBRUSSELS",
-    ],
-    "NDJAENA": [
-        "NDJAENA",
-    ],
-    "NDJAME": [
-        "NDJAME",
-    ],
-    "NDJAMENA": [
-        "NDJAMENA",
-    ],
-    "NEWDE": [
-        "NEWDE",
-    ],
-    "NEWDELHI": [
-        "NEW DELHI",
-        "NEWDEHLI",
-        "NEWDELHI",
-    ],
-    "NEWFAN": [
-        "NEWFAN",
-    ],
-    "NHATR": [
-        "NHATR",
-    ],
-    "NIAMEY": [
-        "NIAMEY",
-    ],
-    "NICE": [
-        "NICE",
-    ],
-    "NICOSI": [
-        "NICOSI",
-        "NICOSIS",
-    ],
-    "NICOSIA": [
-        "NICOSIA",
-    ],
-    "NOGALES": [
-        "NOGALES",
-    ],
-    "NOUAKCHOTT": [
-        "NOUACKCHOTT",
-        "NOUACKHOCTT",
-        "NOUAKCHOTT",
-        "NOUAKC",
-        "OUAKC",
-    ],
-    "NUEVO": [
-        "NUEVO",
-    ],
-    "NUEVOLAREDO": [
-        "NUEVOLAREDO",
-    ],
-    "OECDP": [
-        "OECD",
-        "OECDP",
-    ],
-    "OECDPARIS": [
-        "OECD PARIS",
-        "OECDPARIS",
-    ],
-    "OPORTO": [
-        "OPORTO",
-    ],
-    "ORAN": [
-        "ORAN",
-    ],
-    "OSAKA": [
-        "OSAKA",
-    ],
-    "OSAKAKOBE": [
-        "OSAKAKOBE",
-        "OSAKA KOBE",
-    ],
-    "OSLO": [
-        "OSLO",
-    ],
-    "OTTAWA": [
-        "OTTAWA",
-    ],
-    "OUAGAD": [
-        "OUAGA",
-        "OUAGAD",
-    ],
-    "OUAGADOUGOU": [
-        "OUAGADOUGOU",
-    ],
-    "PALERM": [
-        "PALERM",
-        "PALERMO",
-    ],
-    "PALMS": [
-        "PALMS",
-    ],
-    "PANAMA": [
-        "PANAMA",
-    ],
-    "PARAMA": [
-        "PARAMA",
-    ],
-    "PARAMARIBO": [
-        "PARAMARIBO",
-    ],
-    "PARIS": [
-        "PARIS",
-    ],
-    "PARISFR": [
-        "PARISFR",
-    ],
-    "PARTO": [
-        "PARTO",
-    ],
-    "PEKING": [
-        "PEKING",
-    ],
-    "PERTH": [
-        "PERTH",
-    ],
-    "PESHAW": [
-        "PESHAW",
-    ],
-    "PESHAWAR": [
-        "PESHAWAR",
-    ],
-    "PHNOM": [
-        "PHNOM",
-    ],
-    "PHNOMPENH": [
-        "PHNOM PENH",
-        "PHNOMPENH",
-    ],
-    "PODGORICA": [
-        "PODGORICA",
-    ],
-    "PONTA": [
-        "PONTA",
-    ],
-    "PONTADELGADA": [
-        "PONTA DELGADA",
-        "PONTADELGADA",
-    ],
-    "PORTA": [
-        "PORTA",
-    ],
-    "PORTAUPRINCE": [
-        "PORT AU PRINCE",
-        "PORTAUPRINCE",
-    ],
-    "PORTL": [
-        "PORTL",
-        "PORT LOUIS",
-        "PORTLOUIS",
-    ],
-    "PORTLOUIS": [
-        "PORTLOUIS",
-    ],
-    "PORTM": [
-        "PORTM",
-    ],
-    "PORTMORESBY": [
-        "PORT MORESBY",
-        "PORTMORESBY",
-    ],
-    "PORTO": [
-        "PORTO",
-    ],
-    "PORTOFSPAIN": [
-        "PORT OF SPAIN",
-        "PORTOFSPAIN",
-    ],
-    "POZNAN": [
-        "POZNAN",
-    ],
-    "PRAGUE": [
-        "PRAGUE",
-    ],
-    "PRAIA": [
-        "PRAIA",
-    ],
-    "PRETOR": [
-        "PRETOR",
-    ],
-    "PRETORIA": [
-        "PRETORIA",
-    ],
-    "PRISTINA": [
-        "PRISITNA",
-        "PRISTINA",
-    ],
-    "QUEBEC": [
-        "QUEBEC",
-    ],
-    "QUITO": [
-        "QUITO",
-    ],
-    "RABAT": [
-        "RABAT",
-    ],
-    "RANGOO": [
-        "RANGOO",
-    ],
-    "RANGOON": [
-        "RANGON",
-        "RANGOON",
-    ],
-    "RECIFE": [
-        "RECIFE",
-    ],
-    "REFKU": [
-        "REFKU",
-    ],
-    "REFSI": [
-        "REFSI",
-    ],
-    "REYKJA": [
-        "REYKJA",
-    ],
-    "REYKJAVIK": [
-        "REYKJAVIK",
-    ],
-    "RFCPA": [
-        "RFCPA",
-    ],
-    "RIGA": [
-        "RIGA",
-    ],
-    "RIODEJANEIRO": [
-        "RIO DE JANEIRO",
-        "RIODEJANEIRO",
-        "RIODE",
-        "IODE",
-    ],
-    "RIYADH": [
-        "RIYADH",
-    ],
-    "ROME": [
-        "ROME",
-        "ROMER",
-    ],
-    "ROTTER": [
-        "ROTTER",
-    ],
-    "ROTTERDAM": [
-        "ROTTERDAM",
-    ],
-    "RPODUBAI": [
-        "RPODUBAI",
-    ],
-    "SAIGON": [
-        "SAIGON",
-        "AIGON",
-    ],
-    "SALISB": [
-        "SALISB",
-    ],
-    "SALTT": [
-        "SALTT",
-        "SALT TALKS",
-        "SALTTALKS",
-    ],
-    "SALVAD": [
-        "SALVAD",
-    ],
-    "SALZBU": [
-        "SALZBU",
-    ],
-    "SANA": [
-        "SANA",
-    ],
-    "SANAA": [
-        "SANAA",
-    ],
-    "SANJO": [
-        "SANJO",
-    ],
-    "SANJOSE": [
-        "SAN JOSE",
-        "SANJOSE",
-    ],
-    "SANSA": [
-        "SANSA",
-    ],
-    "SANSALVADOR": [
-        "SAN SALVADOR",
-        "SANSALVADOR",
-    ],
-    "SANTIA": [
-        "SANTAGO",
-        "SANTIA",
-        "SANTIGO",
-    ],
-    "SANTIAGO": [
-        "SANTIAGO",
-    ],
-    "SANTO": [
-        "SANTO",
-    ],
-    "SANTODOMINGO": [
-        "SANTO DOMINGO",
-        "SANTODOMINGO",
-    ],
-    "SAOPA": [
-        "SAOPA",
-    ],
-    "SAOPAULO": [
-        "SAO PAULO",
-        "SAOPAULO",
-    ],
-    "SAPPOR": [
-        "SAPPOR",
-    ],
-    "SAPPORO": [
-        "SAPPORO",
-    ],
-    "SARAJEVO": [
-        "SARAJEVO",
-    ],
-    "SBERL": [
-        "SBERL",
-    ],
-    "SECDEF": [
-        "SECDEF",
-    ],
-    "SECSTATE": [
-        "SECSTATE",
-    ],
-    "SECTO": [
-        "SECTO",
-    ],
-    "SEOUL": [
-        "SEOUL",
-    ],
-    "SEVILL": [
-        "SEVILL",
-        "SEVILLE",
-    ],
-    "SHANGHAI": [
-        "SHANGHAI",
-    ],
-    "SHENYANG": [
-        "SHENYANG",
-    ],
-    "SHIRAZ": [
-        "SHIRAZ",
-    ],
-    "SINAI": [
-        "SINAI",
-    ],
-    "SINGAP": [
-        "SINGAP",
-    ],
-    "SINGAPORE": [
-        "SINGAPORE",
-    ],
-    "SKOPJE": [
-        "SKOPJE",
-    ],
-    "SOFIA": [
-        "SOFIA",
-    ],
-    "STATE": [
-        "STATA",
-        "STATE",
-        "STATES",
-        "STATTE",
-        "DEPTS",
-        "DEPT",
-    ],
-    "STJOH": [
-        "STJOH",
-        "STJOHU",
-    ],
-    "STOCKH": [
-        "STOCKH",
-    ],
-    "STOCKHOLM": [
-        "STOCKHOLM",
-    ],
-    "STPETERSBURG": [
-        "LENINGRAD",
-        "STPETERSBURG",
-    ],
-    "STRASB": [
-        "STRASB",
-    ],
-    "STRASBOURG": [
-        "STRASBOURG",
-    ],
-    "STUTTG": [
-        "STUTTG",
-        "STUTTGART",
-    ],
-    "SUNN": [
-        "SUNN",
-    ],
-    "SURABA": [
-        "SURABA",
-    ],
-    "SURABAYA": [
-        "SURABAYA",
-    ],
-    "SUVA": [
-        "SUVA",
-    ],
-    "SYDNEY": [
-        "SYDNEY",
-    ],
-    "TABRIZ": [
-        "TABRIZ",
-    ],
-    "TAIF": [
-        "TAIF",
-    ],
-    "TAIPEI": [
-        "TAIPEI",
-        "TAIPEIH",
-    ],
-    "TALLINN": [
-        "TALLINN",
-    ],
-    "TANANA": [
-        "TANANA",
-    ],
-    "TANGIE": [
-        "TANGIE",
-        "TANGIER",
-    ],
-    "TASHKENT": [
-        "TASHKENT",
-    ],
-    "TBILISI": [
-        "TBILISI",
-    ],
-    "TEGUCI": [
-        "TEGUCI",
-    ],
-    "TEGUCIGALPA": [
-        "TEGUCIGALPA",
-    ],
-    "TEHRAN": [
-        "TEHRAN",
-        "TEHRN",
-    ],
-    "TELAV": [
-        "TELAV",
-    ],
-    "TELAVIV": [
-        "TEL AVIV",
-        "TELAVIV",
-    ],
-    "THEHA": [
-        "THEHA",
-    ],
-    "THEHAGUE": [
-        "HAGUE",
-        "THE HAGUE",
-        "THEHAGUE",
-    ],
-    "THESSA": [
-        "THESS",
-        "THESSA",
-    ],
-    "THESSALONIKI": [
-        "THESSALONIKI",
-    ],
-    "TIJUAN": [
-        "TIJUAN",
-    ],
-    "TIJUANA": [
-        "TIJUANA",
-    ],
-    "TIRANA": [
-        "TIRANA",
-    ],
-    "TOKYO": [
-        "TOKYO",
-        "TOKYT",
-        "OKYO",
-    ],
-    "TORONT": [
-        "TORONT",
-    ],
-    "TORONTO": [
-        "TORONTO",
-    ],
-    "TORREM": [
-        "TORREM",
-    ],
-    "TOSEC": [
-        "TOSEC",
-    ],
-    "TRIEST": [
-        "TRIEST",
-        "TRIESTE",
-    ],
-    "TRIPOL": [
-        "TRIPOL",
-        "TRIPOTI",
-    ],
-    "TRIPOLI": [
-        "TRIPOLI",
-    ],
-    "TUNIS": [
-        "TUNIS",
-    ],
-    "TURIN": [
-        "TURIN",
-    ],
-    "UDORN": [
-        "UDORN",
-    ],
-    "ULAANBAATAR": [
-        "ULAANBAAATAR",
-        "ULAANBAATAR",
-    ],
-    "UNESCOPARIS": [
-        "UNESCOPARIS",
-    ],
-    "UNESCOPARISFR": [
-        "UNESCOPARISFR",
-    ],
-    "UNROME": [
-        "UNROME",
-    ],
-    "UNVIE": [
-        "UNVIE",
-    ],
-    "UNVIEVIENNA": [
-        "UNVIEVIENNA",
-    ],
-    "USBER": [
-        "USBER",
-    ],
-    "USBERL": [
-        "USBERL",
-    ],
-    "USBERLIN": [
-        "USBERLIN",
-    ],
-    "USDOC": [
-        "USDOC",
-    ],
-    "USECB": [
-        "USECB",
-    ],
-    "USEUBRUSSELS": [
-        "USEUBRUSSELS",
-    ],
-    "USIA": [
-        "USIA",
-    ],
-    "USNATO": [
-        "USNATO",
-    ],
-    "USOECD": [
-        "USOECD",
-    ],
-    "USOSCE": [
-        "USOSCE",
-    ],
-    "USSCC": [
-        "USSCC",
-    ],
-    "USUNN": [
-        "USUN",
-        "USUNN",
-    ],
-    "USUNNEWYORK": [
-        "USUN NEW YORK",
-        "USUNNEWYORK",
-    ],
-    "VALLET": [
-        "VALLET",
-    ],
-    "VALLETTA": [
-        "VALLETTA",
-    ],
-    "VANCOU": [
-        "VANCOU",
-    ],
-    "VANCOUVER": [
-        "VANCOUVER",
-    ],
-    "VATICAN": [
-        "VATICAN",
-    ],
-    "VICTOR": [
-        "VICTOR",
-    ],
-    "VICTORIA": [
-        "VICTORIA",
-    ],
-    "VIENNA": [
-        "VIENNA",
-    ],
-    "VIENTI": [
-        "VIENTI",
-    ],
-    "VIENTIANE": [
-        "VIENTIANE",
-    ],
-    "VILNIUS": [
-        "VILNIUS",
-    ],
-    "VIRGIS": [
-        "VIRGIS",
-    ],
-    "VLADIV": [
-        "VLADIV",
-    ],
-    "VLADIVOSTOK": [
-        "VLADIVOSTOK",
-    ],
-    "WARSAW": [
-        "WARSAW",
-        "WARSZAW",
-    ],
-    "WASHDC": [
-        "WASHDC",
-        "WASDC",
-        "WASLDC",
-    ],
-    "WELLINGTON": [
-        "WELLINGTON",
-        "WELLIN",
-        "ELLIN",
-    ],
-    "WESTI": [
-        "WESTI",
-    ],
-    "WINDHOEK": [
-        "WINDHOEK",
-    ],
-    "WINNIP": [
-        "WINNIP",
-    ],
-    "WINNIPEG": [
-        "WINNIPEG",
-    ],
-    "YAOUND": [
-        "YAOUND",
-    ],
-    "YAOUNDE": [
-        "YAOUNDE",
-    ],
-    "YEKATERINBURG": [
-        "YEKATERINBURG",
-    ],
-    "YEREVAN": [
-        "YEREVAN",
-    ],
-    "ZAGREB": [
-        "ZAGREB",
-    ],
-    "ZANZIB": [
-        "ZANZIB",
-        "ZANZIBAR",
-    ],
-    "ZURICH": [
-        "ZURICH",
-        "ZURIVH",
-    ],
-    "DIA": [
-        "DIA",
-    ],
+    "ABIDJAN": ["ABIDJAN", "ABIDAJN", "ABIDJDAN", "ABIAJDN", "A IDJAN", "ABIDJA"],
+    "ABUDHABI": ["ABUDHABI", "ABU DHABI", "ABUDH", "BUDH", "ADU DHABI"],
+    "ABUJA": ["ABUJA"],
+    "ACCRA": ["ACCRA"],
+    "ADANA": ["ADANA"],
+    "ADDISABABA": ["ADDIS ABABA", "ADDISABABA", "ADDIS", "ADIS"],
+    "ALEXANDRIA": ["ALEXANDRIA", "ALEXAN"],
+    "ALGIERS": ["ALGIERS", "ALGIER"],
+    "ALMATY": ["ALMATY"],
+    "AMMAN": ["AMMAN"],
+    "AMSTERDAM": ["AMSTERDAM", "AMSTER"],
+    "ANKARA": ["ANKARA"],
+    "ANTANANARIVO": ["ANTANANARIVO", "TANANARIVE", "ANTANA"],
+    "ANTWERP": ["ANTWERP", "ANTWER"],
+    "APIA": ["APIA"],
+    "AQABA": ["AQABA"],
+    "ASHGABAT": ["ASHGABAT"],
+    "ASMARA": ["ASMARA"],
+    "ASTANA": ["ASTANA"],
+    "ASUNCION": ["ASUNCION", "ASUNCI"],
+    "ASWAN": ["ASWAN"],
+    "ATHENS": ["ATHENS", "THENS"],
+    "ATLANT": ["ATLANT", "TLANT"],
+    "AUCKLAND": ["AUCKLAND", "AUCKLA"],
+    "BAGHDAD": ["BAGHDAD", "BAGHADAD", "BAGHDA"],
+    "BAKU": ["BAKU"],
+    "BALI": ["BALI"],
+    "BAMAKO": ["BAMAKO"],
+    "BANDARSERIBEGAWAN": ["BANDAR SERI BEGAWAN", "BANDARSERIBEGAWAN"],
+    "BANGKOK": ["BANGKOK", "BANGKO", "BANGKOOK", "ANGKOK", "ANGKO"],
+    "BANGUI": ["BANGUI"],
+    "BANJUL": ["BANJUL", "BATHUR"],
+    "BARCELONA": ["BARCELONA", "BACELONA", "BARCEL"],
+    "BARRANQUILLA": ["BARRANQUILLA", "BARRAN"],
+    "BASRAH": ["BASRAH"],
+    "BEIJING": ["BEIJING", "BEIJIN"],
+    "BEIRUT": ["BEIRUT", "BEIRUTQ"],
+    "BELEM": ["BELEM"],
+    "BELFAST": ["BELFAST", "BELFAS"],
+    "BELGRADE": ["BELGRADE", "BELGRA"],
+    "BELIZE": ["BELIZE"],
+    "BELMOPAN": ["BELMOPAN"],
+    "BERLIN": ["BERLIN", "ERLIN"],
+    "BERN": ["BERN"],
+    "BILBAO": ["BILBAO"],
+    "BISHKEK": ["BISHKEK"],
+    "BISSAU": ["BISSAU"],
+    "BLANTYRE": ["BLANTYRE", "BLANTY"],
+    "BOGOTA": ["BOGOTA", "BOGOT"],
+    "BOMBAY": ["BOMBAY"],
+    "BONN": ["BONN"],
+    "BORDEAUX": ["BORDEAUX", "BORDEA"],
+    "BRASILIA": ["BRASILIA", "BRASIILIA", "BRASIL"],
+    "BRATISLAVA": ["BRATISLAVA"],
+    "BRAZZAVILLE": ["BRAZZAVILLE", "BRAZZA"],
+    "BREMEN": ["BREMEN"],
+    "BRIDGETOWN": ["BRIDGETOWN", "BRIDGETOAN", "BRIDGE"],
+    "BRISBANE": ["BRISBANE", "BRISBA"],
+    "BRUSSELS": ["BRUSSELS", "BRUSSE"],
+    "BUCHAREST": ["BUCHAREST", "BUCHAR", "BUCHA"],
+    "BUDAPEST": ["BUDAPEST", "BUDAPE", "BUDAPST"],
+    "BUENOSAIRES": ["BUENOS AIRES", "BUENOSAIRES", "BUENOS", "BUENOS AIES", "BA"],
+    "BUJUMBURA": ["BUJUMBURA", "BUJUMB"],
+    "BUKAVU": ["BUKAVU"],
+    "CAIRO": ["CAIRO"],
+    "CALCUTTA": ["CALCUTTA", "CALCUTT", "CALCUT"],
+    "CALGARY": ["CALGARY", "CALGAR"],
+    "CALI": ["CALI"],
+    "CANBERRA": ["CANBERRA", "CANBER"],
+    "CAPETOWN": ["CAPE TOWN", "CAPETOWN", "CAPET"],
+    "CARACAS": ["CARACAS", "CARACACS", "CARACA"],
+    "CASABLANCA": ["CASABLANCA", "CASABL"],
+    "CHENNAI": ["CHENNAI"],
+    "CHISINAU": ["CHISINAU"],
+    "COLOMBO": ["COLOMBO", "COLOMB"],
+    "CONAKRY": ["CONAKRY", "CONAKR"],
+    "COPENHAGEN": ["COPENHAGEN", "COPENH"],
+    "COTONOU": ["COTONOU", "COTONO"],
+    "CURACAO": ["CURACAO", "CURACA"],
+    "DACCA": ["DACCA", "DACC"],
+    "DAKAR": ["DAKAR"],
+    "DAMASCUS": ["DAMASCUS", "DAMASC"],
+    "DARESSALAAM": ["DAR ES SALAAM", "DARESSALAAM", "DARES"],
+    "DHAHRAN": ["DHAHRAN", "DHAHRA"],
+    "DHAKA": ["DHAKA"],
+    "DILI": ["DILI"],
+    "DJIBOUTI": ["DJIBOUTI", "DJIBOU"],
+    "DOHA": ["DOHA"],
+    "DOUALA": ["DOUALA"],
+    "DUBAI": ["DUBAI"],
+    "DUBLIN": ["DUBLIN", "DUBLIIN", "DUBLN"],
+    "DUSHANBE": ["DUSHANBE"],
+    "DUSSELDORF": ["DUSSELDORF", "DUSSEL"],
+    "ECBRUSSELS": ["EC BRUSSELS", "ECBRUSSELS", "ECBRU"],
+    "EDINBURGH": ["EDINBURGH", "EDINBU"],
+    "FLORENCE": ["FLORENCE", "FLOREN"],
+    "FRANKFURT": ["FRANKFURT", "FRANKF"],
+    "FREETOWN": ["FREETOWN", "FREETO"],
+    "FUKUOKA": ["FUKUOKA", "FUKUOK"],
+    "GABORONE": ["GABORONE", "GABORO"],
+    "GENEVA": ["GENEVA", "GENEA", "GENEFA", "ENEVA"],
+    "GENOA": ["GENOA"],
+    "GEORGETOWN": ["GEORGETOWN", "GEORGE"],
+    "GOTEBORG": ["GOTEBORG", "GOTEBO"],
+    "GRENADA": ["GRENADA", "GRENAD"],
+    "GUADALAJARA": ["GUADALAJARA", "GUADAL"],
+    "GUANGZHOU": ["GUANGZHOU"],
+    "GUATEMALA": ["GUATEMALA", "GUATEM"],
+    "GUAYAQUIL": ["GUAYAQUIL", "GUAYAQ"],
+    "HALIFAX": ["HALIFAX", "HALIFA"],
+    "HAMBURG": ["HAMBURG", "HAMBUR"],
+    "HAMILTON": ["HAMILTON", "HAMILT"],
+    "HANOI": ["HANOI"],
+    "HARARE": ["HARARE"],
+    "HAVANA": ["HAVANA"],
+    "HELSINKI": ["HELSINKI", "HELSIN"],
+    "HERMOSILLO": ["HERMOSILLO", "HERMOS"],
+    "HONGKONG": ["HONG KONG", "HONGKONG", "HONGK"],
+    "HYDERABAD": ["HYDERABAD"],
+    "IAEAVIENNA": ["IAEA VIENNA", "IAEAVIENNA", "IAEA", "IAEAV"],
+    "IBADAN": ["IBADAN"],
+    "ISLAMABAD": ["ISLAMABAD", "ISLAMA"],
+    "ISTANBUL": ["ISTANBUL", "ISTANB"],
+    "JAKARTA": ["JAKARTA", "JAKART"],
+    "JEDDAH": ["JEDDAH", "JIDDA"],
+    "JERUSALEM": ["JERUSALEM", "JERUSA", "JERUSALEMO"],
+    "JOHANNESBURG": ["JOHANNESBURG", "JOHANN"],
+    "KABUL": ["KABUL"],
+    "KADUNA": ["KADUNA"],
+    "KAMPALA": ["KAMPALA", "KAMPAL"],
+    "KARACHI": ["KARACHI", "KARACH"],
+    "KATHMANDU": ["KATHMANDU", "KATHAMNDU", "KATHMA"],
+    "KHARTOUM": ["KHARTOUM", "KHARTO", "KHARTOM"],
+    "KIGALI": ["KIGALI"],
+    "KINGSTON": ["KINGSTON", "KINGST", "KINGSON"],
+    "KINSHASA": ["KINSHASA", "KINSHAS", "KINSHA", "KINSHSA", "KINSHASAC"],
+    "KOLKATA": ["KOLKATA"],
+    "KUALA LUMPUR": ["KUALA LUMPUR", "KUALALUMPUR", "KUALA"],
+    "KUWAIT": ["KUWAIT"],
+    "KYIV": ["KYIV", "KIEV"],
+    "LAGOS": ["LAGOS", "LAGOGS"],
+    "LAHORE": ["LAHORE"],
+    "LAPAZ": ["LA PAZ", "LAPAZ"],
+    "LIBREVILLE": ["LIBREVILLE", "LIBREV"],
+    "LILONGWE": ["LILONGWE", "LILONG"],
+    "LIMA": ["LIMA"],
+    "LISBON": ["LISBON", "LISBO"],
+    "LJUBLJANA": ["LJUBLJANA"],
+    "LOME": ["LOME"],
+    "LONDON": ["LONDON"],
+    "LUANDA": ["LUANDA"],
+    "LUBUMBASHI": ["LUBUMBASHI", "LUBUMB"],
+    "LUSAKA": ["LUSAKA"],
+    "LUXEMBOURG": ["LUXEMBOURG", "LUXEMB"],
+    "MADRID": ["MADRID"],
+    "MANILA": ["MANILA"],
+    "MAPUTO": ["MAPUTO", "LOURENCO MARQUES", "LOURENCOMARQUES", "LOUREN"],
+    "MARSEILLE": ["MARSEILLE", "MARSEI"],
+    "MASERU": ["MASERU"],
+    "MAZATLAN": ["MAZATLAN", "MAZATL"],
+    "MBABANE": ["MBABANE", "MBABAN"],
+    "MEDELLIN": ["MEDELLIN", "MEDELL"],
+    "MELBOURNE": ["MELBOURNE", "MELBOU"],
+    "MEXICOCITY": ["MEXICO", "MEXICA"],
+    "MILAN": ["MILAN"],
+    "MINSK": ["MINSK"],
+    "MOGADISHU": ["MOGADISHU", "MOGADISCIO", "MOGADI"],
+    "MONROVIA": ["MONROVIA", "MONROV"],
+    "MONTERREY": ["MONTERREY", "MONTER"],
+    "MONTEVIDEO": ["MONTEVIDEO", "MONTEV"],
+    "MONTREAL": ["MONTREAL", "MONTRE"],
+    "MOSCOW": ["MOSCOW", "MOSCO", "MOSCOE"],
+    "MUNICH": ["MUNICH"],
+    "MUSCAT": ["MUSCAT", "MUSCAOA"],
+    "NAIROBI": ["NAIROBI", "NAIROB"],
+    "NEWDELHI": ["NEW DELHI", "NEWDELHI", "NEWDEHLI", "NEWDE"],
+    "NIAMEY": ["NIAMEY"],
+    "NICOSIA": ["NICOSIA", "NICOSI", "NICOSIS"],
+    "NOUAKCHOTT": ["NOUAKCHOTT", "NOUACKCHOTT", "NOUACKHOCTT", "NOUAKC", "OUAKC"],
+    "OSAKAKOBE": ["OSAKAKOBE", "OSAKA KOBE", "OSAKA"],
+    "OSLO": ["OSLO"],
+    "OTTAWA": ["OTTAWA"],
+    "OUAGADOUGOU": ["OUAGADOUGOU", "OUAGAD", "OUAGA"],
+    "PARAMARIBO": ["PARAMARIBO", "PARAMA"],
+    "PARIS": ["PARIS"],
+    "PHNOMPENH": ["PHNOM PENH", "PHNOMPENH", "PHNOM"],
+    "PORTAUPRINCE": ["PORT AU PRINCE", "PORTAUPRINCE"],
+    "PORTLOUIS": ["PORT LOUIS", "PORTLOUIS", "PORTL"],
+    "PORTMORESBY": ["PORT MORESBY", "PORTMORESBY", "PORTM"],
+    "PORTOFSPAIN": ["PORT OF SPAIN", "PORTOFSPAIN"],
+    "PRAGUE": ["PRAGUE"],
+    "PRETORIA": ["PRETORIA", "PRETOR"],
+    "PRISTINA": ["PRISTINA", "PRISITNA"],
+    "RANGOON": ["RANGOON", "RANGON", "RANGOO"],
+    "REYKJAVIK": ["REYKJAVIK", "REYKJA"],
+    "RIODEJANEIRO": ["RIO DE JANEIRO", "RIODEJANEIRO", "RIODE", "IODE"],
+    "ROME": ["ROME", "ROMER"],
+    "SAIGON": ["SAIGON", "AIGON"],
+    "SANAA": ["SANAA", "SANA"],
+    "SANJOSE": ["SAN JOSE", "SANJOSE", "SANJO"],
+    "SANSALVADOR": ["SAN SALVADOR", "SANSALVADOR", "SANSA"],
+    "SANTIAGO": ["SANTIAGO", "SANTIA", "SANTAGO", "SANTIGO"],
+    "SANTODOMINGO": ["SANTO DOMINGO", "SANTODOMINGO", "SANTO"],
+    "SAOPAULO": ["SAO PAULO", "SAOPAULO", "SAOPA"],
+    "SAPPORO": ["SAPPORO", "SAPPOR"],
+    "SEOUL": ["SEOUL"],
+    "SHANGHAI": ["SHANGHAI"],
+    "SINGAPORE": ["SINGAPORE", "SINGAP"],
+    "SOFIA": ["SOFIA"],
+    "STATE": ["STATE", "STATA", "STATES", "STATTE", "DEPTS", "DEPT"],
+    "STOCKHOLM": ["STOCKHOLM", "STOCKH"],
+    "STPETERSBURG": ["STPETERSBURG", "LENINGRAD", "LENING"],
+    "STRASBOURG": ["STRASBOURG", "STRASB"],
+    "STUTTGART": ["STUTTGART", "STUTTG"],
+    "SURABAYA": ["SURABAYA", "SURABA"],
+    "TAIPEI": ["TAIPEI", "TAIPEIH", "AIPEI"],
+    "TANGIER": ["TANGIER", "TANGIE"],
+    "TASHKENT": ["TASHKENT"],
+    "TEGUCIGALPA": ["TEGUCIGALPA", "TEGUCI"],
+    "TEHRAN": ["TEHRAN", "TEHRN"],
+    "TELAVIV": ["TEL AVIV", "TELAVIV", "TELAV"],
+    "THEHAGUE": ["THE HAGUE", "THEHAGUE", "THEHA", "HAGUE"],
+    "THESSALONIKI": ["THESSALONIKI", "THESSA", "THESS"],
+    "TIJUANA": ["TIJUANA", "TIJUAN"],
+    "TOKYO": ["TOKYO", "TOKYT", "OKYO"],
+    "TORONTO": ["TORONTO", "TORONT"],
+    "TRIPOLI": ["TRIPOLI", "TRIPOL", "TRIPOTI"],
+    "TUNIS": ["TUNIS"],
+    "ULAANBAATAR": ["ULAANBAATAR", "ULAANBAAATAR"],
+    "USUNNEWYORK": ["USUN NEW YORK", "USUNNEWYORK", "USUN", "USUNN"],
+    "VIENNA": ["VIENNA", "IENNA"],
+    "VIENTIANE": ["VIENTIANE", "VIENTI"],
+    "WARSAW": ["WARSAW", "WARSZAW", "ARSAW"],
+    "WASHINGTON": ["WASHDC", "WASDC", "WASLDC"],
+    "WELLINGTON": ["WELLINGTON", "WELLIN", "ELLIN"],
+    "WINDHOEK": ["WINDHOEK"],
+    "WINNIPEG": ["WINNIPEG", "WINNIP"],
+    "YAOUNDE": ["YAOUNDE", "YAOUND"],
+    "YEREVAN": ["YEREVAN"],
+    "ZAGREB": ["ZAGREB"],
+    "ZURICH": ["ZURICH", "ZURIVH"],
+    "DIA": ["DIA"]
 }
 
+_STOP_STATIONS = frozenset(
+    s.upper() for s in [
+        "DATED", "DATE", "NUMBER", "NBR", "REFERENCE", "REF", "REFTEL", "PAGE",
+        "PAGES", "SECTION", "CLASSIFIED", "UNCLASSIFIED", "SECRET", "CONFIDENTIAL",
+        "SENSITIVE", "NOTAL", "EXDIS", "NODIS", "STADIS", "PART", "SECT", "ITEM",
+        "NOTE", "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY",
+        "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER", "JAN", "FEB",
+        "MAR", "APR", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC", "MONDAY",
+        "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY",
+    ]
+)
 
-def _build_variant_map():
-    mapping = {}
-    for canonical, variants in STATIONS.items():
-        for v in variants:
-            if v not in mapping:
-                mapping[v] = canonical
-    return mapping
-
-
-def _build_single_stations():
-    result = []
-    for canonical in STATIONS:
-        if " " not in canonical:
-            result.append(canonical)
-    return sorted(result, key=len, reverse=True)
-
-
-def _build_multi_stations():
-    result = []
-    for canonical in STATIONS:
-        if " " in canonical:
-            result.append(canonical)
-    return sorted(result, key=len, reverse=True)
-
-
-_SINGLE_STATIONS = _build_single_stations()
-_MULTI_STATIONS = _build_multi_stations()
-_VARIANT_TO_TARGET = _build_variant_map()
-STATION_PATTERN = "|".join([re.escape(c) for c in _SINGLE_STATIONS])
+_SENDER_DATE_STATIONS = frozenset(
+    s.upper() for s in [
+        "SECDEF", "CINCPAC", "USCINCRED", "CINCUSAREUR", "MACTHAI", "CINCRED",
+        "USMILADREP", "CINC", "USCINCEUR", "CINCLANT", "CINCPACFLT", "CINCLANTFLT",
+        "CINCUNC", "USCINCEC", "KIRTLAND", "KIRTLAND AFB MSG", "SS GERMANY", "SS",
+        "CINCUSNAVEUR", "CINCPACREP", "CINCSAC", "CINCAD", "CINCNORAD", "BNDD",
+        "DIA", "INS", "USPHS", "FAA", "USIA", "AGRICULTURE", "TOSEC", "SECSTATE",
+    ]
+)
