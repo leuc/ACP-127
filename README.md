@@ -135,39 +135,6 @@ python3 src/reftel2graph.py all-mrns.ndjson reference-graph.graphml
 python3 src/analyze_graph.py reference-graph.graphml
 ```
 
-## Coverage
-
-| Year | Docs | Refs | Matched | Rate |
-|---|---|---|---|---|
-| 1973 | 155,278 | 210,904 | 156,091 | 74.0% |
-| 1974 | 239,348 | 236,280 | 181,294 | 76.7% |
-| 1975 | 275,335 | 266,178 | 207,490 | 78.0% |
-| 1976 | 288,088 | 232,871 | 180,691 | 77.6% |
-| 1977 | 296,299 | 243,413 | 189,847 | 78.0% |
-| 1978 | 304,641 | 231,370 | 181,697 | 78.5% |
-| 1979 | 522,283 | 252,831 | 179,372 | 70.9% |
-| **Total** | **2,081,272** | **1,673,847** | **1,276,482** | **76.3%** |
-
-## Graph Properties
-
-| Metric | Value |
-|---|---|
-| Vertices | 1,619,261 (1,010,077 primary) |
-| Edges | 1,274,070 |
-| Weakly connected components | 450,463 |
-| WCC size distribution (p50/p90/p99/p99.9) | 2 / 5 / 18 / 68 |
-| Giant component | 119,431 (7.38% of nodes) |
-| Reciprocity | 0.0003 |
-| Transitivity | 0.0636 |
-| Assortativity | -0.036 |
-| Max k-core | 6 |
-| 3-core nodes | 16,245 |
-| 3-core communities | 2,793 (modularity 0.998) |
-| Giant hubs removed (deg > 6) | 3,593 |
-| Shattered components (after hub removal) | 44,086 |
-
-Top authorities (by PageRank) are all `STATE` messages. Top broadcasters (by out-degree) are embassy stations across multiple years. The high modularity of the 3-core (0.998) indicates strong community structure — the network consists of tightly clustered groups of documents that reference each other, with very little cross-community linking.
-
 ## Key Files
 
 | File | Description |
