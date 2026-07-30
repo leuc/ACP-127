@@ -1,0 +1,837 @@
+            National Archives and Records Administration
+                                                                         8601 Adelphi Road
+                                                         College Park, Maryland 20740-6001
+
+
+
+
+Frequently Asked Questions (FAQ)
+
+Record Group 59: General Records of the Department of State
+Central Foreign Policy File, 1973 – 1979
+
+I. Questions about the Department of State Central Foreign Policy File (CFPF)
+
+      1. What is the Central Foreign Policy File (CFPF)?
+      2. In what formats are the CFPF records?
+      3. What are TAGS?
+      4. Are all the CFPF records preserved?
+      5. What records are designated as permanent?
+      6. What records are designated as temporary?
+      7. Which records have been accessioned by the National Archives?
+      8. How can I locate documents in the P-Reel printout files?
+      9. How can I determine if a full electronic telegram or P-Reel citation is being
+            withheld from viewing?
+      10. Are all 1973-1979 State Telegrams in the AAD?
+      11. Can any of the lost telegram texts be recovered?
+      12. How do I cite records from the Central Foreign Policy Files, beginning with
+            records for 1973?
+      13. Where can I get more information about the Central Foreign Policy File?
+
+II. Questions about using the Access to Archival Databases (AAD) resource to access
+    the digital records of the Department of State Central Foreign Policy File
+
+      1. What kinds of searches can be conducted on the digital records?
+      2. How do I search for records on the basis of dates?
+      3. How can I view the full message text of the records I find?
+      4. Can I download my search results?
+      5. Does AAD search for the meanings of coded values in the CFPF?
+      6. Can I view sample values for fields in these electronic files?
+      7. May I obtain copies of the electronic files available via AAD?
+
+III. Questions about obtaining records from the Department of State Central Foreign
+     Policy File that are not accessible through AAD
+
+      1. What records are not accessible through AAD?
+      2. How do I get access to the telegrams or P-Reel index entries referenced by
+            withdrawal cards?
+      3. How do I get access to paper documents referenced by the P-Reel indexes?
+
+
+
+
+                                            1
+I. Questions about the Department of State Central Foreign Policy File
+
+1. What is the Central Foreign Policy File (CFPF)?
+
+The Central Foreign Policy File (CFPF) is the Department of State's primary record
+keeping system. It contains incoming and outgoing telegrams, airgrams, instructions,
+reports, intra- and inter-departmental memorandums, correspondence, diplomatic
+notes, and other documents relating to the foreign relations of the United States and
+the management and administration of the Department. Between 1973 and 1975, the
+Department made radical changes to the CFPF. In an attempt to utilize computer and
+microfilm technology for the efficient creation, dissemination, storage, and retrieval of
+records, the Department phased out its paper-based central file holdings and created a
+new central recordkeeping system, then called the Automated Data System (ADS).
+
+ADS consisted of an electronic index, computer-output microfilm of many incoming
+and outgoing telegrams, manually created microfilm of hard copy documents, and a
+small volume of paper files of oversize documents. The Department indexed the
+records in a database that initially constituted the main "automated" portion of the
+recordkeeping system. For the manually created microfilm, staff keyed data elements
+such as date, subjects, and document number into the database along with reel and
+frame numbers to create and index of the microfilmed documents. The same types of
+information were captured automatically and manually verified for electronic telegrams
+and the computer-output microfilm. To locate records, users queried the system to
+create a virtual file consisting of document citations and then retrieved relevant
+documents. During the 1990s, data from the database on all records was merged with
+the preserved electronic telegrams into the State Archiving System (SAS), and it is that
+data that is transferred to the National Archives.
+
+The preservation of telegrams in the new system began in July 1973. While initially
+computer-output microfilm served as the preservation medium for the telegrams,
+many were saved in electronic form as well. Within a few years, the electronic versions
+of the telegrams became part of the formal recordkeeping system. A computer output
+microfilm copy of many of the telegrams is found on the D-Reel ("D" for digital)
+microfilm. The electronic telegrams largely duplicate those on the microfilm. Some
+telegrams were not preserved on either the D-Reel microfilm or electronically and are
+found on the P-Reel microfilm described below. NODIS (No Distribution) telegrams
+required special handling. While many were preserved electronically as part of the
+main telegram file, beginning in 1975, they also were preserved on the N-Reel ("N" for
+NODIS) microfilm.
+
+In January 1974, the Department began microfilming paper documents (airgrams,
+memorandums of various types, reports, correspondence, diplomatic notes, aides
+memoire, and in some cases telegrams, etc.) and destroying the original documents.
+This microfilm is referred to as the P-Reel ("P" for paper) microfilm. Documents on the
+film are arranged in the order in which they were received and filmed by the records
+management office, not by subject or point of origin. (Generally, paper-based
+documents dating through December 1973 are found in the legacy paper-based filing
+system arranged according to an alpha-numeric filing system, although there are some
+pre-1974 documents among the P-Reel files.)
+
+
+                                             2
+Hardcopy documents too large for filming, usually publications or processed reports
+sent as enclosures to incoming airgrams, were preserved in their original paper format.
+Those records constitute the Oversize Enclosures ("Bulky Files").
+
+2. In what formats are the CFPF records?
+
+The records that now constitute the CFPF are in three different formats: electronic,
+microfilm, and paper.
+
+Electronic: (1) telegrams between the Department of State and Foreign Service posts
+conveying official information about policy proposals and implementation, program
+activities, or personnel and post operations; (2) index citations to records not
+maintained electronically and now found on the P-Reel microfilm and among the
+Oversize Enclosures; and (3) digital withdrawal cards created by both the Department
+of State and NARA for classified or otherwise restricted telegrams and index citation
+entries to microfilmed records where the citations themselves contain classified or
+otherwise restricted information.
+
+Microfilm: (1) D-Reel microfilm (computer-output microfilm of telegrams); (2) P-Reel
+microfilm (microfilmed paper documents); and (3) N-Reel microfilm (computer-output
+microfilm of NODIS [No Distribution] telegrams).
+
+Paper: (1) oversized enclosures ("Bulky Files") and (2) telegrams originally classified as
+Top Secret (TS) and/or Restricted Data/Formerly Restricted Data (RD/FRD)
+documents. {During migration of the records from earlier platforms to the current
+platform, Top Secret telegrams were printed out for preservation purposes and the
+electronic versions were deleted. Those records now exist only in hardcopy form.}
+
+Additionally, there are paper reference copies of the documents on the P-Reel microfilm
+and the N-Reel microfilm for use by researchers, since
+the film remains classified, and a webpage with links
+to formerly classified or otherwise restricted telegrams
+subsequently released.
+
+3. What are TAGS?
+
+Documents in the various parts of the CFPF are not
+arranged by subject or office of origin. To categorize
+documents for retrieval in ADS, the Department
+developed the TAGS/Terms System, which is still in
+use. "TAGS" stands for "Traffic Analysis by Geography
+and Subject." There are geographic, organization, and
+subject TAGS used to label documents. The system
+requires that each document be labeled with
+appropriate TAGS, including at least one Subject
+TAGS. Supplementing the TAGS, indexers use specific
+words or phrases ("Terms") to assist in refining
+document searches.
+
+
+
+                                               3
+The TAGS/Terms System was not static and TAGS of each kind were added, revised, and
+deleted as necessary over time, as were Terms. The Department periodically issued TAGS
+handbooks for use by staff. They contain a description of all the TAGS in use at the time
+of issuance as well as an explanation of the TAGS/Terms System. NARA has scanned the
+handbooks and makes them available as part of the technical documentation for the
+records. The handbooks can be viewed or downloaded online through AAD.
+
+4. Are all the CFPF records preserved?
+
+Not all records of Federal agencies are preserved in the National Archives. The
+determination of which Federal records are transferred to the National Archives and
+which records may be destroyed is carried out through the process of appraisal and
+scheduling. This is a cooperative process involving both the creating agency and NARA
+and leads to records being assigned a disposition of either permanent or temporary.
+Permanent records are those that have sufficient historical or other value to warrant
+preservation in the National Archives. Temporary records are those that do not
+warrant preservation past the time they are needed by the creating agency for
+administrative, legal, or fiscal purposes. Temporary records are ordinarily not
+transferred to the National Archives.
+
+To determine the archival value of the records, the National Archives and Records
+Administration, in conjunction with the Department of State, carried out an appraisal of
+the CFPF. It concluded that many of the records warranted preservation in their entirety
+but that the telegraphic communications exchanged by the Department of State and
+Foreign Service Posts included a significant volume of ephemeral documents as well as
+other documents that do not warrant preservation in the National Archives. In order to
+eliminate the significant volume of electronic telegrams without long-term value, NARA
+and the Department developed a records disposition schedule using the Subject TAGS as
+the basis for determining the value of the electronic telegrams and segregating the
+permanent records from the temporary records. As a result of that appraisal, certain
+Subjects TAGS were designated as temporary and electronic telegrams bearing only
+temporary Subject TAGS are approved for destruction and are not transferred to the
+National Archives. Appendix II is a list of the temporary Subject TAGS for the period
+1973-1979. The temporary telegrams that have been eliminated are not represented by
+withdrawal cards. All other Subject TAGS are designated as permanent. Since the
+retention of an individual document is determined by the Subject TAGS with the longest
+retention, only the telegrams with only temporary Subject TAGS are destroyed.
+
+5. What records are designated as permanent?
+
+All records on the P-Reels and N-Reels are designated as permanent, as are all the
+Oversize Enclosures, and all the Top Secret telegrams. Electronic telegrams with other
+than only temporary subject TAGS are permanent. This includes all telegrams with
+Subject TAGS covering Economic Affairs, Military and Defense Affairs, Political Affairs,
+Social Affairs, and Technology and Science and telegrams with selected Subject TAGS
+dealing with Administration, Business Services, Consular Affairs, and Operations.
+Appendix I is a list of the permanent Subject TAGS for the period 1973-1979.
+
+The permanent records are found in the following record elements:
+
+
+
+                                             4
+(1) Electronic telegrams designated as permanent, beginning 1973 (see note below);
+(2) D-Reel Microfilm, beginning 1973 (preserved as a backup);
+(3) Electronic Index to the P-Reel Microfilm, beginning 1974 but with some data
+       going back to 1973;
+(4) P-Reel Microfilm, beginning 1974 (with non-record paper printouts for researcher
+       use);
+(5) N-Reel Microfilm, beginning 1975 (with non-record paper printouts for researcher
+       use);
+(6) Oversize Enclosures (hardcopy);
+(7) Top Secret Telegrams (hardcopy).
+
+NOTE: Formerly classified or otherwise restricted telegrams subsequently released are
+found through the "State Archiving System (SAS)" webpage located at:
+https://www.archives.gov/research/foreign-policy/state-dept/rg-59-central-files/1973-1979.html.
+
+6. What records are designated as temporary?
+
+Electronic telegrams bearing only temporary Subject TAGS are approved for
+destruction. In the case of a telegram with multiple Subject TAGS, it is considered
+temporary only if all the Subject TAGS applied to the message are designated as
+temporary. Appendix II is a list of the temporary Subject TAGS for the period 1973-
+1979.
+
+7. Which records have been accessioned by the National Archives?
+
+Records are transferred to the National Archives on a continuing basis. Once
+transferred, they are processed in order to make them available to the public. The
+chart found in Appendix III provides a convenient summary of the various public-use
+elements of the 1973-1979 Central Foreign Policy File, their accessioning status, and
+their availability to researchers.
+
+AAD contains the fully-releasable 1973-1979 permanent electronic telegrams, the
+fully-releasable P-Reel index references to microfilmed documents dated through
+December 31, 1979, and the related withdrawal notices for telegrams and index
+references not fully-releasable (withdrawal cards).
+
+8. How can I locate documents in the P-Reel printout files?
+
+Because of the way the documents on the P-Reel microfilm were filmed, the only way
+to locate documents of interest is through the use of the electronic P-Reel Index. The
+index files provide citations to the hard copy documents that the Department of State
+microfilmed and indexed as part of the CFPF. See illustration. It covers those
+documents not coded as telegrams (TE) in the type field that are now preserved on the
+P-Reel microfilm. Citations to the telegrams on the P-Reels and the N-Reels are found
+in the telegram files, not in the P-Reel index.
+
+The P-Reel documents are numbered with a prefix that identifies the year in which the
+referenced documents were microfilmed not the year in which the documents were
+written. Because different offices retained documents for varying lengths of time, the
+P-Reels frequently contain documents dated earlier than the year in which the
+
+
+                                                    5
+documents were filmed. For
+example, a reel microfilmed in
+1976 will consist primarily of
+documents created that year,
+but may also include
+documents created in preceding
+years. In such cases, the earlier
+documents will be declassified
+and transferred to NARA with
+the documents microfilmed in
+the later year. The citation of a
+P-Reel document also includes
+the frame number of the first
+page. For example, a citation
+that reads "P750066-0259"
+indicates that the document can
+be found on roll 66 of the
+records microfilmed in 1975
+beginning at frame 259.
+
+P-Reel Index files that are
+available online through the Access to Archival Databases (AAD) resource and copies
+of the monthly files are also available for a cost-recovery fee on removable media. The
+documents to which those citations refer are not available online.
+
+9. How can I determine if a full electronic telegram or P-Reel citation is being
+withheld from viewing?
+
+Electronic telegrams and P-Reel citations that have been withdrawn due to the presence of
+security classified information or for other reasons are represented by the withdrawal
+"cards" that are found in separate files from the main body of records. See illustration.
+The Department of State created electronic withdrawal cards for telegrams and P-Reel
+index entries exempt from disclosure for reasons of national security, privacy, and other
+statutory concerns. NARA created additional electronic withdrawal cards for additional
+telegrams and P-Reel
+index references that
+require review under the
+Freedom of Information
+Act due to the presence
+of otherwise restricted
+information such as that
+affecting privacy.
+Withdrawal of a P-Reel
+Index entry is based upon the information found in that entry and does not relate directly
+to the release status of the referenced document. The microfilmed document may not be
+declassified and released even if the index entry is declassified.
+
+10. Are all 1973-1979 State Telegrams in the AAD?
+
+The Department of State electronic telegrams on AAD consist of only the fully
+
+
+                                             6
+releasable 1973-1979 telegrams determined to have permanent historical value that
+could be exported from the contemporary Department of State recordkeeping system.
+Thus, AAD does not contain records appraised as temporary nor does it include
+records that remain security classified or otherwise restricted. In addition, as
+explained below, the text of some of the electronic telegrams was lost during data
+migration.
+
+The Department of State was a pioneer in the use of a database system to preserve
+large complicated text files and there have been problems with the data in the telegram
+database. Over the years, computer obsolescence required migration of the database
+to new hardware and software platforms. During migration, some data was lost
+despite the Department’s best efforts to protect and recover each telegram. Typically,
+the damage resulted in telegrams containing a phrase such as “ERROR READING
+TEXT” or "EXPAND ERROR ENCOUNTERED" instead of the content of the telegram in
+the message text field. See illustration. In some cases, the telegram may not even
+contain a message
+text field. In those
+telegrams with lost
+messages, the
+"locator" field may
+contain a phrase
+such as "ADS TEXT NOT CONVERTED" or "ADS TEXT UNRETRIEVABLE" and may
+indicate if the text was captured on microfilm. In addition, some telegrams were
+intentionally deleted from the electronic repository. The number of lost messages
+appears to be relatively small, except:
+        -most of the message texts from December 1-15, 1975 are missing;
+        -most of the message texts from March 18-31, 1976 are missing;
+        -many of the message texts from April 1-2, 1976 are missing;
+        -most of the message texts from May 25-31, 1976 are missing;
+        -about 92% of the message texts from June 1976 are missing; and
+        -most of the message texts from July 1, 1976 are missing.
+
+11. Can any of the lost
+telegram texts be
+recovered?
+
+Some of the lost message
+texts appear on the
+computer output microfilm
+of the telegrams prepared as
+the database was created,
+(D-Reel microfilm), the
+microfilm of NODIS
+messages (N-Reel microfilm),
+or on the P-Reel microfilm.
+To determine if a given
+telegram is on microfilm,
+check the “Message
+Attributes” page of the on-
+line telegram in AAD to see
+
+
+                                            7
+if the “Film Number” field includes a citation. If that field reads “n/a,” then the message
+does not appear on any CFPF microfilm and the text cannot be recovered. If, however,
+that field consists of a number beginning with D73, D74, D75, D76, D77, D78, D79, P74,
+P75, P76, P77, P78, P79, N75, N76, N77, N78, or N79, the text should be on the CFPF
+microfilm in NARA’s custody.
+
+Telegrams with missing text that have been requested and released are found through the
+"Released Telegrams (Access Demand)" section of the "State Archiving System (SAS)"
+webpage. If the telegram in which you are interested is not found there, the classification
+level found in the “Original Classification” field will determine the course of action. If that
+field reads “confidential” or “secret” submit a Freedom of Information Act request to
+NARA’s Special Access and FOIA Staff at <specialaccess_foia@nara.gov>. If that field reads
+“unclassified” or “limited official use” send a standard reference request to the Archives II
+Reference Section at <archives2reference@nara.gov> to request a copy. Please limit each
+type of request to telegrams on no more than five rolls of film (i.e. - have the same basic
+roll number, such as “D750123”). If you wish to ask for telegrams from more than five
+rolls, please wait until you have received the response to one request of each type (i.e.
+FOIA or standard) before submitting the next.
+
+If the film number begins with D80, P80, or N80 or higher, you must submit a Freedom of
+Information Act (FOIA) request directly to the Department of State to request a copy.
+
+All requests should identify the document with the message reference number (MRN), the
+relevant microfilm citation, and the original classification level indicated in the Message
+Attributes.
+
+12. How do I cite records from the Central Foreign Policy Files, beginning with
+records for 1973?
+
+The NARA publication “Citing Records in the National Archives of the United States”
+General Information Leaflet
+Number 17 provides information
+on citing records. NARA
+recommends that citations include
+the series title "Central Foreign
+Policy Files, 1973-1979", an
+indication of the subset of that
+series (i.e. “Electronic Telegrams”
+or “P-Reel Printouts,” etc.), and the
+record group title "Record Group
+59, General Records of the
+Department of State" with
+additional information as noted
+below:
+
+(1) citations to individual
+telegrams reviewed online should
+include identifying information
+such as date, to, from and the
+Document Number (also known as
+
+
+                                              8
+the Message Reference Number [MRN]) as found in the message attributes. The MRN can
+be found on every telegram. See illustration. For example, "1977MOSCOW02124"
+indicates the 2124th telegram sent by the U.S. embassy in Moscow in 1977, while a
+telegram with the citation "1975STATE095768" is the 95768th telegram sent from the
+Department of State in 1975. Using this number, researchers will be able to retrieve all
+available sections of multi-section telegrams and all available versions of retransmitted
+telegrams. The citation should also include a note in brackets containing the date on
+which the records were retrieved online via the Access to Archival Databases (AAD);
+
+(2) citations to individual telegrams from the D-Reel microfilm or the N-Reel microfilm
+should include identifying information such as date, to, from, the Document Numbers,
+and the Film Number, which can be found on the document;
+
+(3) citations to documents from the P-Reel printouts should indicate the type of document
+(airgram, letter, memorandum, report) and other identifying information such as date,
+from, to, the document number (where appropriate), and the Film Number.
+
+The following are some model notes:
+
+A. Electronic telegrams:
+
+Embassy Manila to Department of State, Telegram 07657, June 27, 1974,
+1974MANILA07657, Central Foreign Policy Files, 1973-79/Electronic Telegrams, RG 59:
+General Records of the Department of State, National Archives (accessed May 1, 2014).
+
+B. Telegram from D-Reels:
+
+Embassy Manila to Department of State, Telegram 07657, June 27, 1974, D740169-1020,
+Central Foreign Policy Files, 1973-79/D-Reel Microfilm, RG 59: General Records of the
+Department of State, National Archives.
+
+C. P-Reel Printouts:
+
+1. Memorandum of Conversation, “Secretary’s London Speech; ECPC; US-French
+Relations; European Unification,” July 1, 1976, P760126-0934, Central Foreign Policy
+Files, 1973-79/P-Reel Printouts, RG 59: General Records of the Department of State,
+National Archives.
+
+2. Embassy Cairo to Department of State, Airgram A-150, August 9, 1976, P760129-0386,
+Central Foreign Policy Files, 1973-79/P-Reel Printouts, RG 59: General Records of the
+Department of State, National Archives.
+
+13. Where can I get more information about the Central Foreign Policy File?
+
+Questions about the organization and content of the records and their relationship to
+other records of the Department of State should be addressed to the Archives II
+Reference Branch (RDT2) at: The National Archives at College Park, 8601 Adelphi
+Road, College Park, MD 20740-6001 or by email at <archives2reference@nara.gov>.
+
+Questions about the electronic records and the use of AAD should be addressed to
+
+
+                                             9
+Reference Branch, Electronic Records Division (RDER) via email to <cer@nara.gov>, or
+telephone, 301-837-0470, or by surface mail to the address noted above.
+II. Questions about using the Access to Archival Databases (AAD) resource to access
+the digital records of the Department of State Central Foreign Policy File
+
+1. What kinds of searches can be conducted on the digital records?
+
+As found in AAD, records can be retrieved in many ways. All of the different fields
+found in the "Message Attributes" can be used for fielded searching. The AAD fielded
+search pages for the electronic CFPF records include a pre-selection of the most
+commonly used fields. Researchers, however, can establish their own search
+parameters using any or a combination of the fields by clicking on the “show more
+fields” option on the fielded-search page. In addition, the entire text of the electronic
+telegrams can be searched for key words, phrases, or names.
+
+For example, researchers can search for telegrams and citations to P-Reel documents
+with specific standard Subject, Country, and/or Organization TAGS by selecting from
+the code table for the TAGS field on the fielded search page. Another approach would
+be to use the "Draft Date," "From," and "To," fields to locate all telegrams and citations
+to hardcopy documents such as airgrams on the P-Reel microfilm in a file, sent to and
+from a given post for a given period. Using the "Document Number" field, researchers
+can locate specific documents within a file, such as telegrams referenced in reports
+and memorandums.
+
+Please note that in order to locate all documents of interest using the AAD fielded
+search option, you must search each of the separate electronic files separately. You
+can search across all electronic CFPF files in AAD by using the free-text search option
+from the AAD series description page for the CFPF or the Diplomatic Records series list
+page. For example, with the free-text search option, you can search for keywords,
+phrases, senders and recipients, dates, and document numbers. For more
+information, see the AAD Getting Started Guide, accessible from the AAD homepage.
+
+2. How do I search for records on the basis of dates?
+
+There are many date fields in the message attributes of the electronic telegram and P-
+Reel index files, as well as dates within the texts of telegrams. To allow efficient
+searching in AAD on the basis of dates, most of the date attributes fields are formatted
+as DATE data types. This means that if you use the fielded search option to search for
+a date in a date attributes field, you should enter the date in the search box for that
+field using the format <mm/dd/yyyy>. Please refer to the Field Notes for a specific date
+field for more details on how to search that field. If, however, you want to use the free-
+text search option to search for a date in the message texts, you should enter the date
+in the free-text search box by using the format <yyyymmdd>. With either type of
+search, when retrieved records are displayed as either partial or full records, the dates
+will appear as they are stored in the raw data. Usually the raw data for date fields
+include both alpha characters and numbers, as in <18 SEP 1974>. A free-text search
+using the alphabetic characters for a month will only find records where those
+characters are literally within the message text or a non-date field. Those searches will
+not return records that have these alphabetic characters for a month in a date field.
+
+
+
+                                              10
+3. How can I view the full text of the electronic telegrams I find?
+
+The initial results of your AAD search are shown on the “Display Partial Records” page.
+The fields that were on your search page will display with the data that is stored in
+them in the raw data record. Other field(s) with the term(s) or phrase(s) you used in a
+free-text search may also display. While the “message text” field is a default search
+field for the files of telegrams and will be included on “Display Partial Records” pages,
+unless you remove it from the search page, only a part of the “message text” displays.
+See illustration. To view the entire message text, and all of the message attributes for
+a record, click on the icon in the
+“View Record” column in the row
+with the record of interest to you.
+Since the full record is in a PDF
+format, you will need Adobe
+Acrobat Reader in order to view the
+document. As noted above, the text
+of some messages may be missing.
+
+4. Can I download my search
+results?
+
+You cannot download the full set of
+records that your search inquiry
+retrieves. You can, however,
+download or print each record
+separately. From the "Display
+Partial Records" page, click on the
+icon in the "View Record" column
+of the partial record of interest to
+you; once the full record displays
+you can print it or save it to your
+computer. Full electronic records
+retrieved from Central Foreign
+Policy Files through AAD are
+displayed as PDF documents. If
+you are interested in ordering
+copies of any of the raw data files
+that are included in AAD, please
+contact Reference Branch,
+Electronic Records Division
+(RDER), via email to
+<cer@nara.gov>, or by telephone,
+301-837-0470.
+
+5. Does AAD search for the meanings of coded values in the Central Foreign
+Policy Files?
+
+
+
+
+                                             11
+When using the fielded search option for a field with a code table, AAD searches by
+codes, not the meanings of coded values. For example, if you want to search for any
+telegrams to or from a country, or about a country, and you use the name of the
+country in the free-text search box, AAD will retrieve the records where the country
+name literally appears at some place in the record. If the only place the country is
+identified in a record is in a geographic TAGS in the TAGS field, AAD will find the
+records only if you run a fielded search using the TAGS field with the appropriate code
+for the country name, as found in the Code List for the TAGS field. Therefore, using
+the TAGS field and the fielded search option can be an efficient way to search for
+records when the geographic location, organization, or subject of your search is
+identified in the TAGS Code List.
+
+6. Can I view sample values for fields in these electronic files?
+
+At the present time, AAD does not display any sample values for any of the fields in the
+electronic files of the Central Foreign Policy Files.
+
+7. May I obtain copies of the electronic files available via AAD?
+
+Copies of released electronic monthly files are also available on removable media on a
+cost-recovery basis. For information, please contact Reference Branch, Electronic
+Records Division (RDER) by telephone at 301-837-0470 or by email at <cer@nara.gov>.
+
+
+III. Questions about obtaining records from the Department of State Central
+Foreign Policy File that are not accessible through AAD
+
+1. What CFPF records are not accessible through AAD?
+
+The following categories of records are not accessible through AAD: (1) paper reference
+copies of documents referred to in the P-Reel Indexes; (2) the oversize ("Bulky")
+enclosures; (3) declassified Top Secret telegrams; (4) paper reference copies of NODIS
+telegrams printed from the N-Reel microfilm; (5) electronic telegrams and full P-Reel
+index entries that contain security classified information or are otherwise restricted
+from public use; (6) temporary telegrams not preserved in the National Archives; and
+(7) the Released Telegrams (Access Demand) webpage.
+
+2. How do I get access to the telegrams or P-Reel index entries referenced by
+withdrawal cards?
+
+Researchers interested in a telegram or a P-Reel index entry referenced by a
+withdrawal "card" must submit a Freedom of Information Act (FOIA) request to NARA’s
+Special Access and FOIA Staff. For more information about submitting a FOIA
+request, please see the NARA FOIA Reference Guide online at:
+http://www.archives.gov/foia/foia-guide.html. Please include the document number,
+document date, and the “to” and “from” citation for each document in your request.
+
+Formerly classified or otherwise restricted telegrams subsequently released are found
+through the "Released Telegrams (Access Demand)" section of the "State Archiving
+System (SAS)" webpage. Before submitting a FOIA or MDR request, be sure to check
+
+
+                                            12
+that resource to determine if the telegram in which you are interested has already been
+released.
+
+As noted above, not all documents cited in the declassified P-Reel Index are open and
+available for public use. In some cases, a document cited in a declassified index
+citation may itself remain security classified or be otherwise restricted from public
+access.
+
+3. How do I get access to paper documents referenced by the P-Reel indexes?
+
+Paper documents referenced in the P-Reel indexes which have a prefix of P74, P75,
+P76, P77, P78, or P79 are at the National Archives in College Park, Maryland. The
+P76, P77, P78, and P79 records are declassified but require screening for otherwise-
+restricted information before researchers can use them. That screening will take place
+as researchers request the records. P-Reel documents with prefixes of P80 and later
+remain in the custody of the Department of State. For more information on availability
+of P74, P75, P76, P77, P78, and P79 documents, researchers should contact the
+Archives II Reference Branch (RDT2) at: The National Archives at College Park, 8601
+Adelphi Road, College Park, MD 20740-6001 or by email at the email address noted
+above. To request access to P-Reel documents with prefixes of P80 and later,
+researchers must submit a Freedom of Information Act (FOIA) request directly to the
+Department of State. Please include the microfilm roll and frame numbers in any
+request for specific documents.
+
+November 28, 2018 Revised
+September 2020 Revised
+
+
+
+
+                                            13
+Appendix I: Permanent Subject TAGS, 1973 - 1979
+
+Subject
+             Field               Title
+TAGS
+ACLM         Administration      Claims Against the U.S. Government
+ACMM         Administration      Committees
+AEMR         Administration      Emergency Planning and Evacuation
+AGAO         Administration      General Accounting Office
+AINF         Administration      Information Management Services
+AINR         Administration      INR Program Administration
+ALTR         Administration      Newsletter
+AMGT         Administration      Management Operations
+AODE         Administration      Employees Abroad
+AORG         Administration      International Organization
+                                 Administration
+ASEC         Administration      Security
+ASIG         Administration      Inspector General Activities
+BAGB         Business Services   Agribusiness
+BBAK         Business Services   Background on Firms, Products, and
+                                 Individuals
+BBCP         Business Services   Business Consultation Program
+BBSR         Business Services   Business Services Reporting
+BDIS         Business Services   Trade Complaints and Disputes
+BENC         Business Services   Engineering and Construction Services
+BEXP         Business Services   Trade Expansion and Promotion
+BFOL         Business Services   Follow-up Request
+BGEN         Business Services   Business Services - General
+BPRO         Business Services   Business Proposals and Inquiries
+BTIO         Business Services   Trade and Investment Opportunities
+BTRA         Business Services   Travel by U.S. and Foreign Businessmen
+CARR         Consular Affairs    Americans Arrested Abroad
+CASC         Consular Affairs    Assistance to Citizens
+CDES         Consular Affairs     Deaths and Estates
+CFED         Consular Affairs    Federal Agency Services
+CGEN         Consular Affairs    Consular Affairs - General
+CPRS         Consular Affairs    Property Protection Services
+E***         Economic Affairs    All Subject TAGS in the “E” field are
+                                 permanent. See the on-line handbooks
+                                 for details.
+M***         Military and        All Subject TAGS in the “M” field are
+             Defense Affairs     permanent. See the on-line handbooks
+
+
+
+                                         14
+                           for details.
+
+
+OCLR   Operations          Military Vessel and Flight Clearances
+                           and Visits
+OCON   Operations          Conferences and Meetings
+OGEN   Operations          Operations - General
+OREP   Operations          U.S. Congressional Travel
+OVIP   Operations          Visits and Travel of Prominent
+                           Individuals and Leaders
+P***   Political Affairs   All Subject TAGS in the "P" field are
+                           permanent. See the on-line handbooks
+                           for details.
+S***   Social Affairs      All Subject TAGS in the "S" field are
+                           permanent. See the on-line handbooks
+                           for details.
+T***   Technology and      All Subject TAGS in the "T" field are
+       Science             permanent. See the on-line handbooks
+                           for details.
+
+
+
+
+                                  15
+Appendix II: Temporary Subject TAGS, 1973-1979
+
+Records on matters covered by the Subject TAGS designated as temporary may be
+preserved among the Department’s decentralized files that are designated as permanent.
+
+Subject
+               Field                Title
+TAGS
+AART           Administration       Art-in-Embassies Program
+AAUD           Administration       Audits
+ABLD           Administration       Buildings
+ABUD           Administration       Budget Services and Financial Systems
+ACOM           Administration       Departmental Communications
+ACMS           Administration       COMSEC Material
+ACOU           Administration       Courier Operations
+ADTO           Administration       Domestic Telecommunications Operations
+                                    Commo & Records Unit/Combined Commo
+AFAC           Administration
+                                    Centers (CRU/CCC)
+AFIN           Administration       Financial Services
+                                    Foreign Service Post COM Center
+AFOP           Administration
+                                    Operations & Administration
+AFSI           Administration       Foreign Service Institute
+AFSP           Administration       Post Administration
+ALIB           Administration       Library Services
+ALOW           Administration       Allowances
+AMED           Administration       Medical Services
+                                    Telecommunications Equipment
+AMTC           Administration
+                                    Maintenance
+ANET           Administration       Communications, circuits, and Networks
+APER           Administration       Personnel
+APOU           Administration       Mail and Pouch
+APUB           Administration       Publishing, Printing, Distribution, and
+                                    Library Services
+AREC           Administration       Commissary and Recreation
+AREG           Administration       Regulations and Directives
+ASAF           Administration       Safety
+ASCH           Administration       Overseas Schools
+ASUP           Administration       Supplies and Equipment
+ATRN           Administration       Transportation
+                                    Foreign Service Post Voice
+AVCE           Administration
+                                    Communications Facility
+AWRD           Administration       Awards
+
+
+
+                                            16
+BLIB   Business Services   Commercial Libraries
+BPUB   Business Services   Business-Commercial Publications and
+                           Libraries
+CPAS   Consular Affairs    Passports and Citizenship
+CVIS   Consular Affairs     Visas
+OEXC   Operations          Educational and Cultural Exchange
+                           Operations
+OSCI   Operations          Science Grants
+OTRA   Operations          Travel and Visits
+
+
+
+
+                                 17
+Appendix III: Summary of records in the National Archives
+
+This chart found summarizes of the various public-use elements of the 1973-1979
+Central Foreign Policy File that have been accessioned and their availability to
+researchers.
+
+                                       1973 1974       1975 1976 1977 1978       1979
+Declassified Electronic Telegrams      A/D A/D         A/D A/D A/D A/D           A/D
+Electronic Telegram Withdrawal         A/D A/D         A/D A/D A/D A/D           A/D
+Notices
+Declassified Electronic P-Reel Index             A/D   A/D   A/D   A/D    A/D    A/D
+Entries
+P-Reel Withdrawal Notices                        A/D   A/D   A/D   A/D    A/D    A/D
+P-Reel Printouts                                 A/D   A/D   A/D   A/D    A/D    A
+N-Reel Printouts                                       A/D   A     A      A      A
+Top Secret Telegrams                             A     A/D   A     A      A      A
+Oversize Enclosures                              A/D   A/D   A/D   A      A      A
+
+Key:
+A = Accessioned
+D = Declassified and available for public use
+X = Not yet legally transferred
+
+Explanation:
+A category marked "A" has been accessioned, but has yet to undergo declassification
+processing or be reviewed for otherwise restricted information. Access is only through a
+FOIA request to the National Archives.
+
+A category marked "A/D" has been accessioned and open to public use, except for those
+documents withdrawn because they contain classified or otherwise restricted information.
+
+A category marked "T" has been physically transferred to the National Archives and is
+undergoing technical and archival processing before accessioning. Access to the finding
+aid is through a FOIA request to the Department of State.
+
+
+
+
+                                                18
+
