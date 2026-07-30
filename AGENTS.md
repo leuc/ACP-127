@@ -190,7 +190,7 @@ Every extracted document produces a flat JSON object with two kinds of fields:
 | `_drafted_by` | `drafting.py` | List of drafting officer lines |
 | `_approved_by` | `drafting.py` | List of approving officer lines |
 | `_executive_order` | `eo_line.py` | Raw E.O. 11652 line text |
-| `_tags` | `tags_line.py` | List of tag strings |
+| `_tags` | `tags_line.py` | Raw TAGS line text (string, unsplit) |
 | `_subject` | `subject_line.py` | Subject text (joined) |
 | `_reference` | `ref_line.py` | List of reference strings |
 | `_section_marker` | `section_marker.py` | List of `{raw, classification, section, total, mrn}` |

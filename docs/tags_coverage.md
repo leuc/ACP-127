@@ -363,5 +363,14 @@ extract ~130 characters of surrounding context.
 - This is TAGS-code research, not a verified authoritative reference — for
   anything load-bearing, cross-check against the actual NARA TAGS/Terms
   handbooks referenced in `docs/faqs.txt` Q3, which are outside this repo.
-- None of this section's findings have been added to `src/tags_mapping.py`;
-  that module remains strictly scoped to the FAQ's own Subject TAGS appendices.
+- Only the 88 codes marked **documented** above are in `src/tags_mapping.py`,
+  as `ORGANIZATION_TAGS` (code -> meaning string). The 12 **guessed/unclear**
+  codes (`BTOP`, `AADP`, `XCSS`, `AORC`, `APAG`, `FORD`, `GULF`, `OPDC`,
+  `ODIP`, `NUTS`, `LIMA`, `IDEA`) were deliberately left out of the mapping
+  module — this table is the only place they're recorded. `ORGANIZATION_TAGS`
+  is a separate dict from `PERMANENT_SUBJECT_TAGS`/`TEMPORARY_SUBJECT_TAGS` so
+  the FAQ-sourced Subject TAGS mapping and this research-derived Organization
+  TAGS mapping are never conflated. `classify_subject_tag()` is unaffected and
+  still classifies these same codes as `"unknown"`, since they are not
+  Subject TAGS in `docs/faqs.txt`'s sense; use `lookup_organization_tag()`
+  for this mapping instead.
