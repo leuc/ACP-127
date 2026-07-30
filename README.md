@@ -128,10 +128,23 @@ done
 # 3. Normalize references to canonical MRN format
 python3 -m src.reftel_normalize *.reftel.ndjson > all-mrns.ndjson
 
-# 4. Build reference graph (GraphML)
-python3 src/reftel2graph.py all-mrns.ndjson reference-graph.graphml
+# 3b. Normalize TAGS the same way (see docs/tags_coverage.md)
+python3 -m src.tags_normalize *.new5.ndjson > all-tags.ndjson
 
-# 5. Analyze graph connectivity
+# 4. Join TAGS onto the reference NDJSON by document_number, so
+#    reftel2graph.py can read both from a single input file. Build a
+#    document_number -> record index from the (smaller) tags file, then
+#    stream-merge it onto every reftel record.
+jq -sc 'INDEX(.document_number)' all-tags.ndjson > all-tags.index.json
+jq -c --slurpfile idx all-tags.index.json '
+  . + {tags: ($idx[0][.document_number].tags // null)}
+' all-mrns.ndjson > all-mrns-tags.ndjson
+
+# 5. Build reference graph (GraphML) — nodes get a "TAGS" attribute
+#    ("type: name (code)\n" per line) wherever a TAGS record was found
+python3 src/reftel2graph.py all-mrns-tags.ndjson reference-graph.graphml
+
+# 6. Analyze graph connectivity
 python3 src/analyze_graph.py reference-graph.graphml
 ```
 
@@ -140,7 +153,8 @@ python3 src/analyze_graph.py reference-graph.graphml
 | File | Description |
 |---|---|
 | `src/reftel_normalize.py` | Reference normalizer: rebulk functional pattern, O(1) station dict |
-| `src/reftel2graph.py` | GraphML builder from normalized NDJSON |
+| `src/tags_normalize.py` | TAGS normalizer/classifier (see `docs/tags_coverage.md`) |
+| `src/reftel2graph.py` | GraphML builder from normalized (reftel + TAGS joined) NDJSON |
 | `src/analyze_graph.py` | Graph analysis: WCC, k-core, PageRank, communities |
 | `src/station_data.py` | 558 canonical stations + 686 variant mappings |
 

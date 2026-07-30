@@ -258,11 +258,21 @@ The reference normalization pipeline converts raw ACP-127 reference strings into
 
    **Station matching:** 558 canonical stations, 686 variant-to-canonical mappings, all loaded into a flat `_STATIONS` dict for O(1) lookup. ~900 entries total.
 
-4. **Build reference graph** (GraphML):
+4. **Normalize TAGS** the same way (see `docs/tags_coverage.md`), then **join onto the reference NDJSON** by `document_number` so `reftel2graph.py` reads both from a single input file:
 
-        python3 src/reftel2graph.py all-mrns.ndjson reference-graph.graphml
+        python3 -m src.tags_normalize *.new5.ndjson > all-tags.ndjson
+        jq -sc 'INDEX(.document_number)' all-tags.ndjson > all-tags.index.json
+        jq -c --slurpfile idx all-tags.index.json '
+          . + {tags: ($idx[0][.document_number].tags // null)}
+        ' all-mrns.ndjson > all-mrns-tags.ndjson
 
-   Reads the normalized NDJSON, builds a directed iGraph where vertices are document numbers and edges point from a document to its references. Each vertex has `date` and `message_preview` (first 100 lines of body text) string attributes. Missing documents (referenced but not in the dataset) are flagged with `missing=True`.
+   Builds a `document_number -> record` index from the (smaller) tags file, then stream-merges it onto every reftel record — avoids slurping the larger reftel file into memory. Records with no matching TAGS get `"tags": null`.
+
+5. **Build reference graph** (GraphML):
+
+        python3 src/reftel2graph.py all-mrns-tags.ndjson reference-graph.graphml
+
+   Reads the normalized (and TAGS-joined) NDJSON, builds a directed iGraph where vertices are document numbers and edges point from a document to its references. Each vertex has `date`, `message_preview` (first 100 lines of body text), and `TAGS` (multi-line `"type: name (code)\n"` per tag, empty string if none) string attributes. Missing documents (referenced but not in the dataset) are flagged with `missing=True`.
 
 ## Normalizer performance
 
@@ -314,7 +324,8 @@ Top authorities (by PageRank) are all `STATE` messages. Top broadcasters (by out
 | Path | Lines | Description |
 |---|---|---|
 | `src/reftel_normalize.py` | 567 | Main normalizer: rebulk functional pattern, `_parse_single_ref()`, `CoverageTracker`, CLI |
-| `src/reftel2graph.py` | 83 | GraphML builder from normalized NDJSON |
+| `src/tags_normalize.py` | 379 | TAGS normalizer/classifier, same CLI style (see `docs/tags_coverage.md`) |
+| `src/reftel2graph.py` | 109 | GraphML builder from normalized (reftel + TAGS joined) NDJSON |
 | `src/station_data.py` | 1844 | 558 canonical stations + 686 variant mappings |
 | `src/station_index.py` | — | StationIndex class (not used by normalizer; uses `_STATIONS` dict directly) |
 | `*.reftel.ndjson` | input | Per-year NDJSON with `document_number`, `date`, `attr_reference`, `reference`, `message_preview` |
