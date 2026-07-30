@@ -143,8 +143,8 @@ def _classify_token(token: str) -> tuple[str, str | None]:
             if status == "temporary":
                 return "temporary", title
             if status == "permanent-wildcard":
-                return _WILDCARD_TYPE_NAMES[code[0]], None
-            return "unknown", None
+                return _WILDCARD_TYPE_NAMES[code[0]], title
+            return "unknown", title
 
     if len(code) == 2:
         # Region TAGS are 2-character *alphanumeric* (e.g. "2M" = Middle
@@ -237,6 +237,7 @@ class CoverageTracker:
         self.na_tokens = {"attr": 0, "body": 0}
         self.whitespace_splits = {"attr": 0, "body": 0}
         self.merged_total = 0
+        self.named_total = 0
         self.type_counts = Counter()
         self.single_source = 0
         self.unknown_codes = Counter()
@@ -261,9 +262,11 @@ class CoverageTracker:
         for entry in merged:
             self.merged_total += 1
             self.type_counts[entry["type"]] += 1
+            if entry["name"] is not None:
+                self.named_total += 1
             if len(entry["sources"]) == 1:
                 self.single_source += 1
-            if entry["type"] == "unknown":
+            if entry["type"] == "unknown" and entry["name"] is None:
                 self.unknown_codes[entry["code"]] += 1
 
     def print_report(self, source_files: list[str], output_path: str | None):
@@ -295,13 +298,10 @@ class CoverageTracker:
             f"({pct(self.single_source, self.merged_total):.2f}%)\n"
         )
 
-        named = sum(
-            self.type_counts[t] for t in ("permanent", "temporary", "organization", "geographic", "person")
-        )
         classified = self.merged_total - self.type_counts["unknown"] - self.type_counts["other"]
         w(
-            f"  named rate (has a resolved meaning):        {named:,} "
-            f"({pct(named, self.merged_total):.2f}%)\n"
+            f"  named rate (has a resolved meaning):        {self.named_total:,} "
+            f"({pct(self.named_total, self.merged_total):.2f}%)\n"
         )
         w(
             f"  classified rate (categorized, name may be null): {classified:,} "

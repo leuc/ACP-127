@@ -630,7 +630,11 @@ REGION_TAGS = {
 # "List of Geographic TAGS Alphabetically by Country or World Regions") --
 # PERIOD-ACCURATE for this corpus's 1973-1979 date range (unlike COUNTRY_TAGS/
 # REGION_TAGS above, which are the *current* 2024 State Dept reference).
-# Transcribed directly from page images (OCR of this scan is too poor to trust).
+# Transcribed directly from page images (OCR of this scan is too poor to trust),
+# then cross-checked against Section 12 ("List of Geographic TAGS Alphabetically
+# by TAGS, Sequenced by World Regions"), which caught two codes ("TK": Turks and
+# Caicos Islands, "TL": Tokelau Islands) that Section 11's own alphabetical list
+# omits -- an apparent gap in the original handbook, not a transcription error.
 # This is the PRIMARY geographic lookup -- see lookup_geographic_tag().
 COUNTRY_TAGS_1974 = {
     "AC": "Antigua",
@@ -829,6 +833,8 @@ COUNTRY_TAGS_1974 = {
     "TC": "United Arab Emirates (UAE)",
     "TD": "Trinidad and Tobago",
     "TH": "Thailand",
+    "TK": "Turks and Caicos Islands",
+    "TL": "Tokelau Islands",
     "TN": "Tonga",
     "TO": "Togo",
     "TP": "Sao Tome and Principe",
@@ -892,6 +898,144 @@ REGION_TAGS_1974 = {
     "XZ": "Scandinavia",
 }
 
+# Source: same 1974 handbook, Section 8 "List of Subject TAGS" (pages TAGS 8
+# p.1-2, TAGS 9) -- covers all 9 subject fields (Administration, Business
+# Services, Consular Affairs, Economic Affairs, Military and Defense Affairs,
+# Operations, Political Affairs, Social Affairs, Technology and Science).
+#
+# All A/B/C/O codes here are already covered by PERMANENT_SUBJECT_TAGS/
+# TEMPORARY_SUBJECT_TAGS above (verified: zero net-new A/B/C/O codes); the FAQ's
+# extra 16 A/B/C/O codes not in this dict were evidently added to the TAGS
+# system after this handbook's June 1974 print date. The FAQ dicts remain the
+# retention-status (permanent/temporary) source of truth for A/B/C/O codes --
+# this dict is NOT used to override their titles.
+#
+# What this dict actually adds: real titles for the E/M/P/S/T wildcard fields,
+# which docs/faqs.txt never enumerates individually (Appendix I just says "all
+# codes in this field are permanent"). classify_subject_tag() uses this as the
+# title source for the "permanent-wildcard" status.
+SUBJECT_TAGS_1974 = {
+    "AART": ("Administration", "Art-in-Embassies Program"),
+    "AAUD": ("Administration", "Audits"),
+    "ABLD": ("Administration", "Buildings"),
+    "ABUD": ("Administration", "Budget Services and Financial Systems"),
+    "ACLM": ("Administration", "Claims for Private Personal Property"),
+    "ACOM": ("Administration", "Departmental Communications"),
+    "AEMR": ("Administration", "Emergency and Evacuation"),
+    "AFIN": ("Administration", "Financial Services"),
+    "AFSI": ("Administration", "Foreign Service Institute"),
+    "AFSP": ("Administration", "Post Administration"),
+    "AINF": ("Administration", "Records and Data Processing Services"),
+    "AINR": ("Administration", "INR Program Administration"),
+    "ALIB": ("Administration", "Library Services"),
+    "ALOW": ("Administration", "Allowances"),
+    "ALTR": ("Administration", "Newsletter"),
+    "AMED": ("Administration", "Medical Services"),
+    "AMGT": ("Administration", "Management and Organization"),
+    "AORG": ("Administration", "International Organization Administration"),
+    "APER": ("Administration", "Personnel"),
+    "APUB": ("Administration", "Publishing, Printing, Distribution"),
+    "AREC": ("Administration", "Commissary and Recreation"),
+    "AREG": ("Administration", "Regulations and Directives"),
+    "ASAF": ("Administration", "Safety"),
+    "ASCH": ("Administration", "Overseas Schools"),
+    "ASEC": ("Administration", "Security"),
+    "ASUP": ("Administration", "Supplies and Equipment"),
+    "ATRN": ("Administration", "Transportation"),
+    "AWRD": ("Administration", "Awards"),
+    "BBAK": ("Business Services", "Background on Firms, Products, and Individuals"),
+    "BBCP": ("Business Services", "Business Consultation Program"),
+    "BBSR": ("Business Services", "Business Services Reports"),
+    "BDIS": ("Business Services", "Trade Complaints, and Disputes and Inquiries"),
+    "BEXP": ("Business Services", "Trade Expansion and Promotion"),
+    "BFOL": ("Business Services", "Followup Requests"),
+    "BGEN": ("Business Services", "Business Services--General"),
+    "BLIB": ("Business Services", "Commercial Libraries"),
+    "BPRO": ("Business Services", "Business Proposals"),
+    "BPUB": ("Business Services", "Business-Commercial Publications"),
+    "BTIO": ("Business Services", "Trade and Investment Opportunities"),
+    "BTRA": ("Business Services", "Travel by U.S. and Foreign Businessmen"),
+    "CASC": ("Consular Affairs", "Assistance to Citizens"),
+    "CDES": ("Consular Affairs", "Deaths and Estates"),
+    "CFED": ("Consular Affairs", "Federal Agency Services"),
+    "CGEN": ("Consular Affairs", "Consular Affairs--General"),
+    "CPAS": ("Consular Affairs", "Passports and Citizenship"),
+    "CPRS": ("Consular Affairs", "Protective Services"),
+    "CVIS": ("Consular Affairs", "Visas"),
+    "EAGR": ("Economic Affairs", "Agriculture and Forestry"),
+    "EAID": ("Economic Affairs", "Foreign Assistance"),
+    "EAIR": ("Economic Affairs", "Aeronautics and Aviation"),
+    "EALR": ("Economic Affairs", "Economic Alert List Reporting"),
+    "ECEM": ("Economic Affairs", "Chemical Industry and Chemical Products"),
+    "ECIN": ("Economic Affairs", "Economic Integration and Collaboration"),
+    "ECON": ("Economic Affairs", "Economic Conditions, Trends and Potential"),
+    "ECRE": ("Economic Affairs", "Construction, Repair, and Expansion"),
+    "ECRP": ("Economic Affairs", "Scheduled Reporting"),
+    "EEWT": ("Economic Affairs", "East-West Trade"),
+    "EFIN": ("Economic Affairs", "Financial and Monetary Affairs"),
+    "EFIS": ("Economic Affairs", "Fishing"),
+    "EGEN": ("Economic Affairs", "Economic Affairs--General"),
+    "EIND": ("Economic Affairs", "Commerce, Industry, and Industrial Products"),
+    "EINV": ("Economic Affairs", "Investments"),
+    "ELAB": ("Economic Affairs", "Labor and Manpower"),
+    "ELEC": ("Economic Affairs", "Noncommunications Electrical and Electronic Equipment"),
+    "ELTN": ("Economic Affairs", "Land Transportation"),
+    "EMAE": ("Economic Affairs", "Machinery and Related Equipment"),
+    "EMES": ("Economic Affairs", "Medical, Engineering, and Scientific Equipment"),
+    "EMIN": ("Economic Affairs", "Metals and Minerals"),
+    "ENRG": ("Economic Affairs", "Energy"),
+    "EPAP": ("Economic Affairs", "Plant, Animal, and Wood Products"),
+    "ESTC": ("Economic Affairs", "Strategic Trade Controls"),
+    "ETEL": ("Economic Affairs", "Telecommunications and Postal Systems and Equipment"),
+    "ETRD": ("Economic Affairs", "Foreign Trade"),
+    "EWWT": ("Economic Affairs", "Waterborne Transportation"),
+    "MARR": ("Military and Defense Affairs", "Military and Defense Arrangements"),
+    "MASS": ("Military and Defense Affairs", "Military Assistance and Sales"),
+    "MILI": ("Military and Defense Affairs", "Military Affairs--General"),
+    "MMOL": ("Military and Defense Affairs", "Materiel, Ordnance and Logistics"),
+    "MNUC": ("Military and Defense Affairs", "Military Nuclear Applications"),
+    "MOPS": ("Military and Defense Affairs", "Military Operations"),
+    "MORG": ("Military and Defense Affairs", "Military Organization and Structure"),
+    "MPOL": ("Military and Defense Affairs", "Military Policy and Planning"),
+    "OCLR": ("Operations", "Vessel and Flight Clearances and Visits"),
+    "OCON": ("Operations", "Conferences and Meetings"),
+    "OEXC": ("Operations", "Educational and Cultural Exchange Operations"),
+    "OGEN": ("Operations", "Operations--General"),
+    "OREP": ("Operations", "Congressional Travel"),
+    "OSCI": ("Operations", "Science Grants"),
+    "OTRA": ("Operations", "Travel and Visits"),
+    "OVIP": ("Operations", "VIP Travel Arrangements"),
+    "PARM": ("Political Affairs", "Arms Control and Disarmament"),
+    "PBOR": ("Political Affairs", "Boundary and Sovereignty Claims"),
+    "PDEV": ("Political Affairs", "National Development"),
+    "PDIP": ("Political Affairs", "Diplomatic and Consular Representation"),
+    "PFOR": ("Political Affairs", "Foreign Policy and Relations"),
+    "PGOV": ("Political Affairs", "Government"),
+    "PINR": ("Political Affairs", "Intelligence"),
+    "PINS": ("Political Affairs", "Internal Security"),
+    "PINT": ("Political Affairs", "Internal Political Affairs"),
+    "PLOS": ("Political Affairs", "Law of the Seas Affairs"),
+    "PORG": ("Political Affairs", "Policy Relations With International Organizations"),
+    "PORS": ("Political Affairs", "Public Order and Safety"),
+    "PROP": ("Political Affairs", "Propaganda and Psychological Operations"),
+    "SCUL": ("Social Affairs", "Cultural Affairs"),
+    "SEDU": ("Social Affairs", "Education"),
+    "SENV": ("Social Affairs", "Environment"),
+    "SGEN": ("Social Affairs", "Social Affairs--General"),
+    "SHUM": ("Social Affairs", "Human Rights"),
+    "SNAR": ("Social Affairs", "Narcotics"),
+    "SOCI": ("Social Affairs", "Social Conditions"),
+    "SOPN": ("Social Affairs", "Public Opinion and Information"),
+    "SPOP": ("Social Affairs", "Population"),
+    "SREF": ("Social Affairs", "Refugees"),
+    "SWEL": ("Social Affairs", "Public Welfare"),
+    "TBIO": ("Technology and Science", "Biological and Medical Science"),
+    "TECH": ("Technology and Science", "Technology"),
+    "TGEN": ("Technology and Science", "Technology and Science--General"),
+    "TPHY": ("Technology and Science", "Physical Sciences"),
+    "TSPA": ("Technology and Science", "Space Activities"),
+}
+
 # Appendix I: "All Subject TAGS in the [E/M/P/S/T] field are permanent." The FAQ
 # does not enumerate these codes (see the on-line TAGS handbooks for details).
 _WILDCARD_PERMANENT_PREFIXES = frozenset({"E", "M", "P", "S", "T"})
@@ -906,12 +1050,18 @@ _WILDCARD_FIELD_NAMES = {
 
 
 def classify_subject_tag(code: str) -> tuple[str, str | None]:
-    """Classify a 4-letter Subject TAGS code per docs/faqs.txt Appendix I/II.
+    """Classify a 4-letter Subject TAGS code.
+
+    Status (permanent/temporary retention) comes from docs/faqs.txt Appendix
+    I/II -- the NARA-vetted source for retention scheduling. Title comes
+    from the FAQ when it has one, else from SUBJECT_TAGS_1974 (the primary-
+    source 1974 handbook) when the FAQ doesn't enumerate the code -- this is
+    the only source for E/M/P/S/T wildcard-field titles, since the FAQ never
+    lists those individually.
 
     Returns (status, title):
       status is one of "permanent", "temporary", "permanent-wildcard", "unknown".
-      title is the Appendix title text, or None if not explicitly enumerated
-      (wildcard-covered and unknown codes have no title in the FAQ).
+      title is a confirmed title string, or None if not found in either source.
     """
     code = code.strip().upper()
 
@@ -923,8 +1073,18 @@ def classify_subject_tag(code: str) -> tuple[str, str | None]:
         _, title = TEMPORARY_SUBJECT_TAGS[code]
         return "temporary", title
 
+    entry_1974 = SUBJECT_TAGS_1974.get(code)
+
     if len(code) == 4 and code[0] in _WILDCARD_PERMANENT_PREFIXES:
-        return "permanent-wildcard", None
+        return "permanent-wildcard", (entry_1974[1] if entry_1974 else None)
+
+    if entry_1974:
+        # Confirmed by the 1974 handbook but not in the FAQ's retention
+        # dicts (e.g. an A/B/C/O code added after this handbook's June 1974
+        # print date would go the other way -- FAQ has it, this dict
+        # doesn't -- but the reverse is also handled here for robustness).
+        # Retention status is unknown; the code and meaning are still confirmed.
+        return "unknown", entry_1974[1]
 
     return "unknown", None
 

@@ -486,3 +486,26 @@ Cambodia), `WB` (West Berlin), `RH` (Rhodesia). `src/tags_mapping.py`'s
 `lookup_geographic_tag()` checks the 1974 tables first and only falls back to
 the modern ones for codes the 1974 handbook doesn't have (post-1974
 independences like Angola, Mozambique).
+
+### Verification pass
+
+Every transcribed entry was re-checked directly against the page images a
+second time (all of Section 11's country/region pages, both pages of
+Section 15's Organization TAGS list). Every single Organization TAGS entry
+(pages TAGS 15 p.1-2) matched exactly on the second pass — zero errors.
+
+Cross-checking Section 11 (the alphabetical-by-country list, pages TAGS 11
+p.1-3) against Section 12 (the by-region cross-reference, pages TAGS 12
+p.1-6, which repeats every country grouped under its world region) surfaced
+two codes present in Section 12 but **missing from Section 11's own
+alphabetical list** — an omission in the original 1974 document itself, not
+a transcription error on this side:
+
+| Code | Country | Found in |
+|---|---|---|
+| `TK` | Turks and Caicos Islands | Section 12, "XL Caribbean" region group only |
+| `TL` | Tokelau Islands | Section 12, "XP Pacific Ocean Area" region group only |
+
+Both are now included in `COUNTRY_TAGS_1974` (229 entries total, up from
+227). No other discrepancies were found across either section on this
+verification pass.
