@@ -509,3 +509,50 @@ a transcription error on this side:
 Both are now included in `COUNTRY_TAGS_1974` (229 entries total, up from
 227). No other discrepancies were found across either section on this
 verification pass.
+
+## Investigation: top `unknown` codes after tags_normalize.py improvements
+
+After the 1974 handbook integration (COUNTRY_TAGS_1974, REGION_TAGS_1974,
+SUBJECT_TAGS_1974), the corpus-wide `unknown` bucket was re-aggregated across
+all 7 years (57,232 occurrences, 5,384 unique codes) and the same jq
+sample-and-read methodology was applied to the top ~40 offenders by
+frequency.
+
+### Confirmed and added to `ORGANIZATION_TAGS`
+
+| Code | Meaning | Evidence |
+|---|---|---|
+| `RL` | Radio Liberty | 1973MADRID04050's own TAGS line spells it out: `"...RADIO FREE EUROPE, RADIO LIBERTY, RFE, RL"` |
+| `EP` | European Parliament | 1978BRUSSE01122 body: `"THE EUROPEAN PARLIAMENT (EP) ADDRESSED..."` |
+| `NARC` | National Administrative Reform Council (Thailand, post-1976 coup) | 1976BANGKO28706 body: `"ADMINISTRATIVE REFORM COUNCIL (NARC)"` |
+| `USUN` | United States Mission to the United Nations | Consistent UN context across 8/8 samples, including contemporary Ambassador Andrew Young references matching the real USUN ambassador of that period |
+| `DC` | Democrazia Cristiana (Italian Christian Democracy party) | 6/6 samples are Italy-specific party politics, e.g. "PSI, DC, PLI, PSDI" (other Italian party abbreviations) |
+
+### Investigated but NOT added — strong context, no primary-source or spelled-out confirmation
+
+These remain in `unknown` deliberately. Each has a plausible, sometimes very
+likely, reading from context, but none is confirmed to the standard used
+elsewhere in this file (spelled out in text, or an unambiguous verified
+institution/primary source):
+
+| Code | Occurrences | Likely meaning (unconfirmed) | Why it's not confirmed |
+|---|---:|---|---|
+| `GC` | 11,951 | Possibly German Democratic Republic (East Germany) — every sample is GDR-context (Leipzig fair, Reichsbahn, GDR delegation) | Co-occurs with `GE` (the confirmed 1974-handbook code for East Germany) as a *separate* tag in several documents, so they can't simply be the same code; no sample spells out what `GC` stands for |
+| `VM` | 6,161 | Possibly Vietnam (post-reunification, or general) | Consistent Vietnam context across all years including 1973 (pre-reunification), which is hard to reconcile with a simple "post-1975" explanation; not in either 1974 handbook or modern FAM table |
+| `WI` | 581 | Possibly Western Sahara (post-1975 successor to the "SS" Spanish Sahara code, after Spain's withdrawal) | Consistently co-occurs with Maghreb/Western Sahara conflict countries (`AG`, `MO`, `MR`, `SS`, `ML`); never spelled out |
+| `ZI` | 390 | Possibly Zimbabwe (transitional 1978-1979 usage, alongside the older `RH` Rhodesia code) | Matches the historical timeline (Zimbabwe-Rhodesia transition) closely but not confirmed by any source |
+| `YU` | 635 | Possibly an alternate/common code for Yugoslavia (official 1974 code is `YO`) | Consistent Yugoslavia context, but using the well-known ISO-style code instead of the confirmed State Dept code looks like drafter variance, not a second official code |
+| `NK` | ~192 | Possibly an alternate code for North Korea (official 1974 code is `KN`) | Same pattern as `YU`/`YO` — consistent North Korea context, unofficial-looking variant code |
+| `ZP` | 185 | Possibly an alternate code for the Persian Gulf region (official 1974 code is `6P`) | Consistent Persian Gulf context, unofficial-looking variant of the confirmed region code |
+| `AMER` | 616 | Possibly "Americans" (consular/administrative headcount context) | Plausible from context (`CPRS`/evacuation-adjacent tags) but never spelled out |
+| `BTOP` | 1,662 | Possibly Business Services "Trade Opportunity" | Consistently co-occurs with `BEXP`/`BTIO` in "PRIVATE TRADE OPPORTUNITY" subjects, but absent from both the FAQ and the 1974 handbook's Business Services list |
+| `BMEP` | 1,205 | Unclear — NATO procurement/equipment context (NAMSA, SATCOM, "Major [Equipment] Projects Program") | No sample spells out the expansion |
+| `BCOM` | 675 | Unclear — recurring "commercial"-themed subjects (CIVAIR, EXPO '74, EXIM Bank) | No sample spells out the expansion |
+| `PS` | — | Confirmed as "Socialist Party" in context, but genuinely ambiguous — used for **both** the French PS and the Portuguese PS in different documents | Two different real, confirmed meanings depending on country; adding one flat entry would be wrong roughly half the time |
+| `EA` / `EB` | 242 / 122 | State Department Bureau symbols (EA = Bureau of East Asian and Pacific Affairs, EB = Bureau of Economic and Business Affairs), not TAGS codes at all | Both consistently appear as `ACTION`/`INFO` distribution-line office codes (e.g. `"INFO OCT-01 EB-11 L-03..."`) leaking into the TAGS field — a different phenomenon from a genuine Organization TAGS code, and out of scope for `ORGANIZATION_TAGS` |
+
+A number of other codes in the top 40 (`AGEN`, `BCON`, `BCRP`, `BEXT`,
+`BTRD`, `CIVS`, `CORP`, `OCOM`, `OECX`, `OPER`, `OTRV`, `OXEC`) had zero
+matches when sampled via `Message Attributes.TAGS` (they only appear via the
+body `_tags` source in this sample, or too rarely to get a useful sample) and
+were not investigated further this round.
