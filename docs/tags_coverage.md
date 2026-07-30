@@ -353,6 +353,53 @@ extract ~130 characters of surrounding context.
 | `LIMA` | Likely informal drafter usage flagging the "Lima Programme"/Non-Aligned conference held in Lima, Peru — not a standard TAGS code | Real ACP-127 geographic TAGS are 2-letter country codes, not 4-letter city names; this looks like an ad hoc addition rather than a defined code |
 | `IDEA` | Uncertain — recurring "IDEA CONFERENCE" across many cities (Santiago, Amsterdam, Cairo, Kuala Lumpur, Paris); one cable parenthetically glosses it as "IDEA (IAA)", hinting at a link to an advertising-industry association (IAA) | No sample spells out the full name; the IAA connection is speculative |
 
+## Non-4-letter Organization TAGS (added while building src/tags_normalize.py)
+
+`src/tags_normalize.py`'s classifier initially only checked `ORGANIZATION_TAGS`
+for exactly-4-letter codes, so real (non-4-letter) organization codes it
+encountered fell into `other` unclassified. Rather than add them from general
+knowledge, the same sampling methodology used above (jq pass finding docs
+tagged with each candidate code across all 7 years, sampling up to 8 per
+code, checking subject/body text for confirming context) was applied to 24
+candidates found in the `other` bucket. **23 confirmed, 1 explicitly
+rejected**:
+
+| Code | Meaning | Evidence |
+|---|---|---|
+| `ADB` | Asian Development Bank | 1976THEHA01371: "ASIAN DEVELOPMENT BANK (ADB) ANNUAL MEETING" |
+| `BIE` | Bureau International des Expositions | 1976STATE307281: "BUREAU OF INTERNATIONAL EXPOSITIONS (BIE)" |
+| `CENTO` | Central Treaty Organization | Consistent "CENTO MINISTERIAL MEETING"/"CENTO COUNCIL" usage across Ankara/Islamabad/London cables |
+| `COCOM` | Coordinating Committee for Multilateral Export Controls | Consistent "COCOM DOC(nn)nnnn" / export-control-list-review context across multiple years |
+| `ECAFE` | UN Economic Commission for Asia and the Far East | Bangkok-origin cables (ECAFE's actual HQ), "ECAFE: EXECUTIVE SECRETARY VISIT", "GUAM MEMBERSHIP IN ECAFE" |
+| `ECE` | UN Economic Commission for Europe | Geneva-origin cables (ECE's actual HQ), "ECE SEMINAR ON..." recurring pattern |
+| `ECOSOC` | UN Economic and Social Council | USUNN-origin: "ELECTED BY ECOSOC ON A BROAD AND FAIR GEOGRAPHIC BASIS", "62D ECOSOC" |
+| `EEC` | European Economic Community | 1977BRUSSE09041: "MEETINGS OF THE EEC-ACP INSTITUTIONS" |
+| `FAO` | Food and Agriculture Organization | Rome-origin cables (FAO's actual HQ), "AQUINO CANDIDACY FOR FAO DIRECTOR GENERAL" |
+| `ILO` | International Labour Organization | 1977YAOUND02290: "63RD INTERNATIONAL LABOR CONFERENCE (ILC)" |
+| `IMF` | International Monetary Fund | Consistent "IMF/IBRD MEETINGS", "IMF EXECUTIVE DIRECTOR" usage |
+| `ITU` | International Telecommunication Union | Geneva-origin, "ITU MONTHLY MAGAZINE TELECOMMUNICATION" |
+| `NAC` | North Atlantic Council (NATO) | NATOB/USNATO-origin: "NOON SESSION OF NAC IN BRUSSELS", "DECEMBER NAC MINISTERIAL" |
+| `OAS` | Organization of American States | Consistent "OAS SPECIAL COMMITTEE", "SECRETARY GENERALSHIP OF OAS" usage |
+| `OAU` | Organization of African Unity | Addis Ababa-origin cables (OAU's actual HQ), "OAU SECRETARY GENERAL" |
+| `PANAM` | Pan American World Airways | 1975BRUSSE01878: "PANAM BRUSSELS REP WILLIAM O'GORMAN" |
+| `SEATO` | Southeast Asia Treaty Organization | Bangkok-origin cables (SEATO's actual HQ), "SEATO COUNCIL MEETING" |
+| `UNCTAD` | UN Conference on Trade and Development | Geneva-origin, "UNCTAD: COMMITTEE ON ECONOMIC CO-OPERATION" |
+| `UNESCO` | UN Educational, Scientific and Cultural Organization | Paris-origin cables (UNESCO's actual HQ), "IO/UNESCO" |
+| `UNIDO` | UN Industrial Development Organization | Vienna-origin cables (UNIDO's actual HQ), "UNIDO TENTH SESSION INDUSTRIAL DEVELOPMENT BOARD" |
+| `UNRWA` | UN Relief and Works Agency for Palestine Refugees | Beirut/Amman-origin, "UNRWA AND PLO", "UNRWA: JORDAN AND US CO-SPONSOR" |
+| `WHO` | World Health Organization | Geneva-origin, "WHO PROGRAM BUDGET 1978-1979" |
+| `WMO` | World Meteorological Organization | 1978GENEVA09021: "WORLD METEOROLOGICAL ORGANIZATION (WMO)" spelled out |
+
+**Rejected: `XMB`.** All 8 sampled documents either show no direct mention of
+`XMB` anywhere in subject/body text, or only indirect co-occurrence with
+Export-Import Bank subjects ("REOPENING EX-IM BANK LENDING TO CHILE",
+"EXIMBANK FINANCING", "FCIA CLAIM"). Unlike every confirmed code above, no
+sample ever names what `XMB` stands for. This is consistent with it being a
+State Department distribution/action-office code (like the `EB-11`, `OCT-01`
+style codes seen in cable header routing lines) rather than an organization —
+exactly the failure mode to guard against, and why it is **not** in
+`ORGANIZATION_TAGS`.
+
 ### Caveats
 
 - Sample size is small (up to 6 docs per code, spread across the full match
@@ -363,14 +410,79 @@ extract ~130 characters of surrounding context.
 - This is TAGS-code research, not a verified authoritative reference — for
   anything load-bearing, cross-check against the actual NARA TAGS/Terms
   handbooks referenced in `docs/faqs.txt` Q3, which are outside this repo.
-- Only the 88 codes marked **documented** above are in `src/tags_mapping.py`,
-  as `ORGANIZATION_TAGS` (code -> meaning string). The 12 **guessed/unclear**
-  codes (`BTOP`, `AADP`, `XCSS`, `AORC`, `APAG`, `FORD`, `GULF`, `OPDC`,
-  `ODIP`, `NUTS`, `LIMA`, `IDEA`) were deliberately left out of the mapping
-  module — this table is the only place they're recorded. `ORGANIZATION_TAGS`
-  is a separate dict from `PERMANENT_SUBJECT_TAGS`/`TEMPORARY_SUBJECT_TAGS` so
-  the FAQ-sourced Subject TAGS mapping and this research-derived Organization
-  TAGS mapping are never conflated. `classify_subject_tag()` is unaffected and
-  still classifies these same codes as `"unknown"`, since they are not
-  Subject TAGS in `docs/faqs.txt`'s sense; use `lookup_organization_tag()`
-  for this mapping instead.
+- The 111 codes described above (88 + 23) were this session's corpus-research
+  additions to `ORGANIZATION_TAGS`. **Superseded/extended below**: a primary
+  source (the actual 1974 State Dept TAGS handbook) was later located and is
+  now the preferred source wherever it overlaps — see the section below.
+  The 12 **guessed/unclear** codes (`BTOP`, `AADP`, `XCSS`, `AORC`, `APAG`,
+  `FORD`, `GULF`, `OPDC`, `ODIP`, `NUTS`, `LIMA`, `IDEA`) remain deliberately
+  left out — this document is the only place they're recorded.
+  `ORGANIZATION_TAGS` is a separate dict from
+  `PERMANENT_SUBJECT_TAGS`/`TEMPORARY_SUBJECT_TAGS` so the FAQ-sourced
+  Subject TAGS mapping and the Organization TAGS mapping are never conflated.
+  `classify_subject_tag()` is unaffected and still classifies these same
+  codes as `"unknown"`, since they are not Subject TAGS in `docs/faqs.txt`'s
+  sense; use `lookup_organization_tag()` for this mapping instead.
+
+## Primary source found: the actual 1974 State Dept TAGS handbook
+
+The user supplied `docs/rg59_state_dept_tags_74.pdf` / `.txt` — "TRAFFIC
+ANALYSIS BY GEOGRAPHY AND SUBJECT and EXECUTIVE ORDER 11652 CODES", Department
+of State, TL:TAGS-1, dated **6-28-74**. This is the actual period-accurate
+primary source for this corpus (1973-1979), superseding both the corpus-
+sampling research above and the modern (2024) FAM reference for anything it
+covers. **The embedded/extracted OCR text (both the user's `.txt` and a fresh
+`pdftotext` pass) is too corrupted to use directly** (e.g. "GEQGRAPHY A N D
+SUBJECT", "T;L4NSh.lITT.4!,"). Instead, `pdftoppm` was used to render the
+relevant pages (Sections 11 "Geographic TAGS" and 15 "Organization TAGS") as
+images at 200dpi, which were read and transcribed directly (visually, not via
+OCR) into `src/tags_mapping.py` as `COUNTRY_TAGS_1974`, `REGION_TAGS_1974`,
+and merged into `ORGANIZATION_TAGS` (1974 wording wins where it overlaps with
+the corpus-research entries above; entries not covered by the 1974 handbook
+are kept as-is).
+
+**Also fetched**: the modern State Dept TAGS reference itself, since it was
+the first thing checked before the 1974 handbook was supplied —
+[5 FAH-3 H-410](https://fam.state.gov/FAM/05FAH03/05FAH030410.html)
+(Geo-Political TAGS, current) and
+[5 FAH-3 H-110](https://fam.state.gov/fam/05fah03/05fah030110.html)
+(Subject TAGS Categories, current) — both UNCLASSIFIED (U) published
+reference material. `fam.state.gov` serves an incomplete TLS certificate
+chain (a server-side misconfiguration, not a trust concern for this
+unauthenticated public page), so `curl -k` was used to fetch it.
+
+### Coverage impact (measured on full 1973 data, 155,278 docs)
+
+| Metric | Corpus-research + modern FAM only | + 1974 handbook (primary) |
+|---|---:|---:|
+| Geographic-shaped occurrences resolved | 66.8% (modern FAM table only) | **94.8%** |
+| `tags_normalize.py` named rate | 50.12% | **63.60%** |
+| `tags_normalize.py` classified rate | 82.06% | **95.45%** |
+| `tags_normalize.py` `unknown` bucket | 65,937 (13.79%) | **3,387 (0.71%)** |
+
+### `XMB` resolved
+
+The previous session flagged `XMB` (471-586 occurrences depending on year) as
+correlating with Export-Import Bank subjects but rejected it for lack of
+direct confirmation — exactly the caution the user asked for. The 1974
+handbook's Organization TAGS list (Section 15) settles it definitively:
+**`XMB` = "Export-Import Bank of the United States"**. It was a real,
+prescribed Organization TAGS code; the earlier corpus-sampling method simply
+couldn't prove it without the primary source. Now included in
+`ORGANIZATION_TAGS`.
+
+### Geographic TAGS — 1974 vs. current codes differ substantially
+
+The 1974 handbook uses a **different 2-letter coding scheme** than today's
+GENC/ISO-3166 standard. Common differences found: `UK` (not modern `GB`) for
+United Kingdom, `JA` (not `JP`) for Japan, `SP` (not `ES`) for Spain, `TU`
+(not `TR`) for Turkey, `IZ` (not `IQ`) for Iraq, `PO` (not `PT`) for
+Portugal, `HO` (not `HN`) for Honduras, `IC` (not `IS`) for Iceland (note:
+`IC`≠"Chile" despite the near-miss — `CI` is Chile, `IC` is Iceland), plus
+codes for entities with no current equivalent: `UR` (Soviet Union), `YO`
+(Yugoslavia), `CS` (Costa Rica in the 1974 scheme — **not** Czechoslovakia,
+which is `CZ`), `VS`/`VN` (South/North Vietnam), `CB` (Khmer Republic/
+Cambodia), `WB` (West Berlin), `RH` (Rhodesia). `src/tags_mapping.py`'s
+`lookup_geographic_tag()` checks the 1974 tables first and only falls back to
+the modern ones for codes the 1974 handbook doesn't have (post-1974
+independences like Angola, Mozambique).
