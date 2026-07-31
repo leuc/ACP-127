@@ -18,7 +18,7 @@ to tackle the large amount of messy data the app MUST:
 - track the match coverage across all input documents (percentage how many documents had a match)
 
 the data is extracted with chains of patterns that are combined in a depedency tree of rebulk Rules
-use rebulk skills do fully understands its features and use
+use rebulk skills to fully understands its features and use
 
 for each extract field we define a pattern in a dedicated file
 MOST matched fields are exported to JSON
