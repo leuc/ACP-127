@@ -7,16 +7,9 @@ from NARA's SAS databases (the digitized State Department Central Foreign Policy
 with noise ADDED by NARA's own processing/reproduction (declassification-review reformatting,
 stamps, spacing artifacts, etc.) — not by any OCR pass on this project's side. Never attribute
 irregularities (dropped characters, odd spacing, garbled fields, unlabeled numeric fields) to
-"OCR" — that is an unconfirmed and so far disproven explanation for such artifacts (e.g. see the
-investigation into the bare header number preceding ACTION/ORIGIN in the distribution block:
-directly rendering the source PDF page confirmed the field is genuinely unlabeled in the
-original document, not stripped by OCR). Treat all irregularities as properties of the
-original database extract plus NARA's reproduction process, and verify against a rendered
-source PDF page (`pdftoppm`) before asserting a cause.
+"OCR" — that is an unconfirmed and so far disproven explanation for such artifacts
 
-read docs/rebulk.md for documentation
-use `pydoc3 rebulk` to lookup function calls
-for examples of rebulk usage look at /usr/lib/python3/dist-packages/guessit
+use jq, rg, fdfind for exploration
 
 entry point: `python3 -m src.extractor [--limit N] [--sample N] <paths...>`
 
@@ -25,6 +18,7 @@ to tackle the large amount of messy data the app MUST:
 - track the match coverage across all input documents (percentage how many documents had a match)
 
 the data is extracted with chains of patterns that are combined in a depedency tree of rebulk Rules
+use rebulk skills do fully understands its features and use
 
 for each extract field we define a pattern in a dedicated file
 MOST matched fields are exported to JSON
