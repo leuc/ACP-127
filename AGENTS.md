@@ -234,6 +234,8 @@ Classification is done via match tags: a match with `"attribute"` in `match.tags
 
 Output: JSON lines to stdout, coverage summary to stderr.
 
+Always store plaintext coverage summary in results/coverage/ with a date based filename
+
 # Date normalization
 
 rebulk (`src/patterns/dtg.py`, `src/patterns/attributes.py`) only **extracts** date-shaped
