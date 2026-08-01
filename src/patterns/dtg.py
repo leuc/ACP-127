@@ -1,79 +1,52 @@
-"""Extract Date-Time Group (DTG) from message content and parse to ISO 8601.
+"""Extract Date-Time Group (DTG) from message content — raw components only.
 
 Per ACP-127(G) §113: DTG is 6 digits (DDHHMM) + zone suffix Z +
 3-letter month + optional 2-digit year.  The line may be prefixed
 by precedence prosigns (§150): Z=FLASH, O=IMMEDIATE, P=PRIORITY, R=ROUTINE.
 Dual precedence (§152) is indicated by two prosigns (e.g. "P R").
 
+This module only extracts the raw matched pieces — century inference,
+calendar validation, and precedence-letter mapping happen downstream in
+src/date_utils.py::parse_dtg (see src/date_normalize.py), so rebulk stays
+extraction-only and all date parsing lives in one shared place.
+
 Output fields:
-  _dtg — {raw, precedence, date_iso}
+  _dtg — {raw, precedence_raw, dd, hh, mm, mon, yy}
 
 Stripped from message_content after extraction.
 """
 
-from datetime import datetime
-
 from rebulk import Rebulk, Rule
 from rebulk.remodule import re
 
-_MONTHS = {
-    "JAN": 1,
-    "FEB": 2,
-    "MAR": 3,
-    "APR": 4,
-    "MAY": 5,
-    "JUN": 6,
-    "JUL": 7,
-    "AUG": 8,
-    "SEP": 9,
-    "OCT": 10,
-    "NOV": 11,
-    "DEC": 12,
-}
+_MONTH_NAMES = [
+    "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+    "JUL", "AUG", "SEP", "OCT", "NOV", "DEC",
+]
 
-_MONTH_PAT = "|".join(_MONTHS)
+_MONTH_PAT = "|".join(_MONTH_NAMES)
 
 _DTG_RE = re.compile(
     rf"^(?P<full>(?:[ZOPR] [ZOPR] |[ZOPR] )(?P<dd>\d{{2}})(?P<hh>\d{{2}})(?P<mm>\d{{2}})Z (?P<mon>{_MONTH_PAT}) (?P<yy>\d{{2}}))\s*$",
     re.MULTILINE,
 )
 
-_PRECEDENCE_MAP = {
-    "Z": "FLASH",
-    "O": "IMMEDIATE",
-    "P": "PRIORITY",
-    "R": "ROUTINE",
-}
 
-
-def _parse_year(yy):
-    """Convert 2-digit year to 4-digit per ACP-127 spec §113.
-
-    06-99 → 1906-1999, 00-05 → 2000-2005.
-    """
-    y = int(yy)
-    return 2000 + y if y <= 5 else 1900 + y
-
-
-def _parse_dtg_line(line):
-    """Parse a DTG line and return parsed dict or None if invalid."""
+def _raw_dtg(line):
+    """Return the raw captured DTG components, unparsed."""
     m = _DTG_RE.match(line)
     if not m:
         return None
     g = m.groupdict()
-    dd, hh, mm = int(g["dd"]), int(g["hh"]), int(g["mm"])
-    if dd < 1 or dd > 31 or hh > 23 or mm > 59:
-        return None
-    yyyy = _parse_year(g["yy"])
-    try:
-        dt = datetime(yyyy, _MONTHS[g["mon"]], dd, hh, mm)
-    except ValueError:
-        return None
-    prec_raw = g["full"][: g["full"].index(g["dd"])].strip()
+    precedence_raw = g["full"][: g["full"].index(g["dd"])].strip()
     return {
         "raw": g["full"],
-        "precedence": [_PRECEDENCE_MAP.get(c, c) for c in prec_raw.split()],  # type: ignore[arg-type]
-        "date_iso": dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "precedence_raw": precedence_raw,
+        "dd": g["dd"],
+        "hh": g["hh"],
+        "mm": g["mm"],
+        "mon": g["mon"],
+        "yy": g["yy"],
     }
 
 
@@ -87,7 +60,7 @@ def dtg():
         tags=["message_content"],
         every=True,
         private_names=["full", "dd", "hh", "mm", "mon", "yy"],
-        formatter=_parse_dtg_line,
+        formatter=_raw_dtg,
     )
 
     rebulk.rules(ParseDTG)
@@ -96,10 +69,12 @@ def dtg():
 
 
 class ParseDTG(Rule):
-    """Validate DTG matches: must be within message content region, year 1973-1979.
+    """Scope DTG matches to the message content region.
 
-    Removes invalid DTG matches. Valid matches are left in place with
-    their value already populated by the regex pattern's formatter.
+    Only structural scoping happens here — a match must fall between the
+    message_text_marker and message_attributes_marker. Calendar validation
+    (century inference, day/month bounds, 1973-1979 plausibility) happens
+    downstream in src/date_utils.py::parse_dtg.
     """
 
     priority = 32
@@ -113,21 +88,9 @@ class ParseDTG(Rule):
         region_start = text_ms[0].end
         region_end = attr_ms[0].start
 
-        to_remove = []
-        for m in matches.named("dtg"):
-            if not (region_start <= m.start < region_end):
-                to_remove.append(m)
-                continue
-            val = m.value
-            if val is None or not isinstance(val, dict) or val.get("date_iso") is None:
-                to_remove.append(m)
-                continue
-            year = int(val["date_iso"][:4])
-            if year < 1973 or year > 1979:
-                to_remove.append(m)
-                continue
-
-        return to_remove
+        return [
+            m for m in matches.named("dtg") if not (region_start <= m.start < region_end)
+        ]
 
     def then(self, matches, when_response, context):
         for m in when_response:

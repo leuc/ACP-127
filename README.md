@@ -108,7 +108,7 @@ done
 
 # Reference Normalization Pipeline
 
-Extract structured reference data from ACP-127 messages and build a directed reference graph for network analysis.
+Extract structured reference data from ACP-127 messages and normalize it to a canonical MRN format.
 
 ## Pipeline
 
@@ -117,6 +117,7 @@ Extract structured reference data from ACP-127 messages and build a directed ref
 python3 -m src.extractor <paths...>
 
 # 2. Flatten to reftel NDJSON (extract relevant fields for faster loading)
+#    "date" stays raw here (Draft Date // Sent Date, unparsed) -- see step 3a
 for year in {1973..1979}; do
   jq -Mc '{"references": ._reference, "attr_reference": ."Message Attributes"."Reference",
            "document_number": ."Message Attributes"."Document Number",
@@ -125,37 +126,30 @@ for year in {1973..1979}; do
     ${year}.ndjson > ${year}.reftel.ndjson
 done
 
-# 3. Normalize references to canonical MRN format
+# 3a. Normalize every date-bearing field (body DTG + all Message Attribute
+#     dates) into ISO 8601, with its own coverage report on stderr
+python3 -m src.date_normalize *.ndjson > all-dates.ndjson
+
+# 3b. Normalize references to canonical MRN format
 python3 -m src.reftel_normalize *.reftel.ndjson > all-mrns.ndjson
 
-# 3b. Normalize TAGS the same way (see docs/tags_coverage.md)
+# 3c. Normalize TAGS the same way
 python3 -m src.tags_normalize *.new5.ndjson > all-tags.ndjson
-
-# 4. Join TAGS onto the reference NDJSON by document_number, so
-#    reftel2graph.py can read both from a single input file. Build a
-#    document_number -> record index from the (smaller) tags file, then
-#    stream-merge it onto every reftel record.
-jq -sc 'INDEX(.document_number)' all-tags.ndjson > all-tags.index.json
-jq -c --slurpfile idx all-tags.index.json '
-  . + {tags: ($idx[0][.document_number].tags // null)}
-' all-mrns.ndjson > all-mrns-tags.ndjson
-
-# 5. Build reference graph (GraphML) — nodes get a "TAGS" attribute
-#    ("type: name (code)\n" per line) wherever a TAGS record was found
-python3 src/reftel2graph.py all-mrns-tags.ndjson reference-graph.graphml
-
-# 6. Analyze graph connectivity
-python3 src/analyze_graph.py reference-graph.graphml
 ```
+
+This repo's pipeline stops at extraction + normalization. Graph-building and
+other corpus-level research analysis (citation graphs, statistical cross-checks,
+investigative writeups) now live in the sibling `cable-insights` repo, which
+consumes the NDJSON produced above as its data source.
 
 ## Key Files
 
 | File | Description |
 |---|---|
+| `src/date_utils.py` | Shared date parsing: attribute date strings + DTG components -> ISO 8601 |
+| `src/date_normalize.py` | Date normalizer: all date-bearing fields, with per-field coverage |
 | `src/reftel_normalize.py` | Reference normalizer: rebulk functional pattern, O(1) station dict |
-| `src/tags_normalize.py` | TAGS normalizer/classifier (see `docs/tags_coverage.md`) |
-| `src/reftel2graph.py` | GraphML builder from normalized (reftel + TAGS joined) NDJSON |
-| `src/analyze_graph.py` | Graph analysis: WCC, k-core, PageRank, communities |
+| `src/tags_normalize.py` | TAGS normalizer/classifier |
 | `src/station_data.py` | 558 canonical stations + 686 variant mappings |
 
 See `AGENTS.md` and `docs/REFTEL.md` for detailed architecture and failure analysis.

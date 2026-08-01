@@ -85,27 +85,10 @@ The normalizer does **no splitting** of multi-ref strings. Each ref enters `_par
 # Normalize all years
 python3 -m src.reftel_normalize *.reftel.ndjson > all-mrns.ndjson
 
-# Normalize TAGS the same way (see docs/tags_coverage.md)
+# Normalize TAGS the same way
 python3 -m src.tags_normalize *.new5.ndjson > all-tags.ndjson
-
-# Join TAGS onto the reference NDJSON by document_number, so reftel2graph.py
-# reads both from a single input file. Build a document_number -> record
-# index from the tags file, then stream-merge it onto every reftel record.
-jq -sc 'INDEX(.document_number)' all-tags.ndjson > all-tags.index.json
-jq -c --slurpfile idx all-tags.index.json '
-  . + {tags: ($idx[0][.document_number].tags // null)}
-' all-mrns.ndjson > all-mrns-tags.ndjson
-
-# Build reference graph — nodes get a "TAGS" attribute
-# ("type: name (code)\n" per line) wherever a TAGS record was found
-python3 src/reftel2graph.py all-mrns-tags.ndjson reference-graph.graphml
 ```
 
-The join can also be done as a single command with process substitution
-instead of writing `all-tags.index.json` to disk:
-
-```bash
-jq -c --slurpfile idx <(jq -sc 'INDEX(.document_number)' all-tags.ndjson) '
-  . + {tags: ($idx[0][.document_number].tags // null)}
-' all-mrns.ndjson > all-mrns-tags.ndjson
-```
+Joining this output with TAGS, building a citation graph from it, and other
+downstream research analysis live in the sibling `cable-insights` repo, which
+consumes this NDJSON as its data source.

@@ -130,7 +130,7 @@ Rules with priority < 96 operate on the already-extracted `_message_content` val
 
 # Attribute parsing details
 
-`attributes.py` defines 63 known keys and 3 rules:
+`attributes.py` defines 69 known keys and 3 rules:
 - **`ExtendAttributeValue` (160)** — extends `key` matches to `key: value` on same line plus indented continuation lines
 - **`RemoveAttributesBeforeMarker` (128)** — removes attribute matches appearing before `message_attributes_marker` (deps: `ExtendAttributeValue`)
 - **`MergeContinuationLines` (96)** — extends attributes to include column-0 continuation lines (non-key, non-blank) between attributes (deps: `RemoveAttributesBeforeMarker`)
@@ -150,7 +150,7 @@ Rules with priority < 96 operate on the already-extracted `_message_content` val
 | File | Pattern Name(s) | Rule(s) | Priority | Output field |
 |---|---|---|---|---|
 | `src/patterns/message_sections.py` | `message_text_marker`, `message_attributes_marker` | — | — (markers) | — |
-| `src/patterns/attributes.py` | 63 attribute key strings | `ExtendAttributeValue`, `RemoveAttributesBeforeMarker`, `MergeContinuationLines` | 160, 128, 96 | `Message Attributes` dict |
+| `src/patterns/attributes.py` | 69 attribute key strings | `ExtendAttributeValue`, `RemoveAttributesBeforeMarker`, `MergeContinuationLines` | 160, 128, 96 | `Message Attributes` dict |
 | `src/patterns/locator.py` | — | `TagLocatorTextOnline` | 152 | — (tags only) |
 | `src/patterns/classification.py` | `classification_marker` | — | — | `_classification_marker` |
 | `src/patterns/declass_markings.py` | `marking_line` (6 strings) | `CollectMarkings` | 200 | — (removed) |
@@ -179,7 +179,7 @@ Rules with priority < 96 operate on the already-extracted `_message_content` val
 
 Every extracted document produces a flat JSON object with two kinds of fields:
 
-**"Message Attributes"** (dict) — all ACP-127 key:value fields from the Message Attributes section, nested under this single key. These are the 63 known attribute keys (see `_KEYS` in `attributes.py`). They never have a `_` prefix.
+**"Message Attributes"** (dict) — all ACP-127 key:value fields from the Message Attributes section, nested under this single key. These are the 69 known attribute keys (see `_KEYS` in `attributes.py`). They never have a `_` prefix.
 
 **Underscore-prefixed fields** — any match that is NOT a message attribute (e.g. `_message_content`, `_file`). These are computed or metadata fields, not directly from the attribute section. The `_` prefix distinguishes them from the raw input data.
 
@@ -190,7 +190,7 @@ Every extracted document produces a flat JSON object with two kinds of fields:
 | `_classification_marker` | `classification_extraction.py` | List of unique classification strings (near page breaks) |
 | `_page_break` | `page_break_extraction.py` | List of `{line, page}` entries |
 | `_dash_counters` | `dash_counter.py` | Integer from dash counter line |
-| `_dtg` | `dtg.py` | Dict `{raw, precedence, date_iso}` |
+| `_dtg` | `dtg.py` | Raw components dict `{raw, precedence_raw, dd, hh, mm, mon, yy}` — **not parsed**; rebulk only extracts, calendar parsing happens downstream in `src/date_utils.py::parse_dtg` (see `src/date_normalize.py`) |
 | `_distribution` | `distribution.py` | Dict `{raw, ACTION: {CODE: count, ...}, ORIGIN, INFO, _sum_check}` |
 | `_from` | `from_line.py` | Originator string (FM line body) |
 | `_to` | `to_line.py` | TO addressee text (lines joined with spaces) |
@@ -234,6 +234,50 @@ Classification is done via match tags: a match with `"attribute"` in `match.tags
 
 Output: JSON lines to stdout, coverage summary to stderr.
 
+# Date normalization
+
+rebulk (`src/patterns/dtg.py`, `src/patterns/attributes.py`) only **extracts** date-shaped
+text — it never parses a date to ISO or validates a calendar. All date parsing lives in
+`src/date_utils.py`, invoked from `src/date_normalize.py`:
+
+- `_dtg` (see JSON output table above) is a raw components dict — no century inference, no
+  `datetime()` validation, no plausibility range applied at extraction time.
+- The 9 date-bearing Message Attributes (`Capture Date`, `Decaption Date`, `Disposition Date`,
+  `Disposition Approved on Date`, `Review Date`, `Review Release Date`, `Review Transfer Date`,
+  `Draft Date`, `Sent Date`) stay raw strings in `"Message Attributes"`, same as every other
+  attribute.
+
+`src/date_utils.py` provides:
+- `parse_date(raw: str) -> str | None` — parses an attribute date string (formats: `%d %b %Y`,
+  `%d-%b-%Y %I:%M:%S %p`, `%d-%b-%Y`, `%d/%m/%Y`, plus already-ISO passthrough) into ISO 8601, or
+  `None` if unparseable.
+- `parse_dtg(components: dict) -> dict | None` — takes `_dtg`'s raw components and returns
+  `{raw, precedence, date_iso}` (the shape `_dtg` used to have inline), applying the 2-digit→
+  4-digit century heuristic, calendar validation, and the 1973-1979 plausibility clamp. Returns
+  `None` if invalid.
+
+`src/date_normalize.py` is the CLI that runs this over a corpus, mirroring
+`src/reftel_normalize.py`/`src/tags_normalize.py`'s shape exactly (same `CoverageTracker` +
+`print_report()` pattern, reads `results/<year>.ndjson` directly):
+
+    python3 -m src.date_normalize <file.ndjson> [...] > output.ndjson
+
+Per document, output is `{document_number, document_number_raw, document_date, doc_year, dtg,
+dates}` where `document_date` prefers `Draft Date` and falls back to `Sent Date` (same priority
+`src/reftel_normalize.py`/`src/tags_normalize.py` already use), and `dates` holds one normalized
+ISO value (or `null`) per attribute date field. Its stderr report gives per-field raw-presence
+and parse-success/failure rates — the audit surface for "is this date field actually parseable."
+
+`document_number_raw` is the un-normalized `Document Number` attribute value, straight from the
+input, before `_normalize_doc_number()` rewrites `document_number` to canonical MRN form. All
+three normalizers (`date_normalize.py`, `reftel_normalize.py`, `tags_normalize.py`) emit this
+field so a caller can always trace a normalized `document_number` back to its exact source
+document.
+
+`src/reftel_normalize.py::_parse_document_date` delegates to `date_utils.parse_date` rather than
+maintaining its own format list; `src/tags_normalize.py` inherits this via its existing import of
+`_parse_document_date`.
+
 # Reference Normalization Pipeline
 
 The reference normalization pipeline converts raw ACP-127 reference strings into canonical MRN format and builds a directed reference graph.
@@ -250,7 +294,7 @@ The reference normalization pipeline converts raw ACP-127 reference strings into
           jq -Mc '{"references": ._reference, "attr_reference": ."Message Attributes"."Reference", "document_number": ."Message Attributes"."Document Number", "date": ."Message Attributes"."Draft Date" // ."Message Attributes"."Sent Date", "message_preview": (._message_content | if . then split("\n")[:100] | join("\n") else null end)}' results/${year}.ndjson > results/${year}.reftel.ndjson
         done
 
-   This produces per-year NDJSON files (e.g. `1973.reftel.ndjson`) with `document_number`, `date`, `attr_reference`, `references`, and `message_preview` (first 100 lines of the cleaned body text) fields.
+   This produces per-year NDJSON files (e.g. `1973.reftel.ndjson`) with `document_number`, `date`, `attr_reference`, `references`, and `message_preview` (first 100 lines of the cleaned body text) fields. Note: `date` here is still the **raw** `Draft Date`/`Sent Date` string — see the "Date normalization" section above for where it actually gets parsed.
 
 3. **Normalize references** to canonical MRN format:
 
@@ -266,21 +310,14 @@ The reference normalization pipeline converts raw ACP-127 reference strings into
 
    **Station matching:** 558 canonical stations, 686 variant-to-canonical mappings, all loaded into a flat `_STATIONS` dict for O(1) lookup. ~900 entries total.
 
-4. **Normalize TAGS** the same way (see `docs/tags_coverage.md`), then **join onto the reference NDJSON** by `document_number` so `reftel2graph.py` reads both from a single input file:
+4. **Normalize TAGS** the same way:
 
         python3 -m src.tags_normalize *.new5.ndjson > all-tags.ndjson
-        jq -sc 'INDEX(.document_number)' all-tags.ndjson > all-tags.index.json
-        jq -c --slurpfile idx all-tags.index.json '
-          . + {tags: ($idx[0][.document_number].tags // null)}
-        ' all-mrns.ndjson > all-mrns-tags.ndjson
 
-   Builds a `document_number -> record` index from the (smaller) tags file, then stream-merges it onto every reftel record — avoids slurping the larger reftel file into memory. Records with no matching TAGS get `"tags": null`.
-
-5. **Build reference graph** (GraphML):
-
-        python3 src/reftel2graph.py all-mrns-tags.ndjson reference-graph.graphml
-
-   Reads the normalized (and TAGS-joined) NDJSON, builds a directed iGraph where vertices are document numbers and edges point from a document to its references. Each vertex has `date`, `message_preview` (first 100 lines of body text), and `TAGS` (multi-line `"type: name (code)\n"` per tag, empty string if none) string attributes. Missing documents (referenced but not in the dataset) are flagged with `missing=True`.
+This repo's pipeline stops here. Joining reftel + TAGS output, building the
+citation graph, and analyzing it are now part of the sibling `cable-insights`
+repo, which consumes this repo's NDJSON output as its data source (not a code
+dependency).
 
 ## Normalizer performance
 
@@ -294,26 +331,6 @@ The reference normalization pipeline converts raw ACP-127 reference strings into
 | 1978 | 304,641 | 231,370 | 181,697 | 78.5% | — |
 | 1979 | 522,283 | 252,831 | 179,372 | 70.9% | — |
 | **Total** | **2,081,272** | **1,673,847** | **1,276,482** | **76.3%** | **51.0s** |
-
-## Reference graph properties
-
-| Metric | Value |
-|---|---|
-| Vertices | 1,619,261 (1,010,077 primary) |
-| Edges | 1,274,070 |
-| Weakly connected components | 450,463 |
-| WCC size distribution (p50/p90/p99/p99.9) | 2 / 5 / 18 / 68 |
-| Giant component | 119,431 (7.38% of nodes) |
-| Reciprocity | 0.0003 |
-| Transitivity | 0.0636 |
-| Assortativity | -0.036 |
-| Max k-core | 6 |
-| 3-core nodes | 16,245 |
-| 3-core communities | 2,793 (modularity 0.998) |
-| Giant hubs removed (deg > 6) | 3,593 |
-| Shattered components (after hub removal) | 44,086 |
-
-Top authorities (by PageRank) are all `STATE` messages. Top broadcasters (by out-degree) are embassy stations across multiple years. The high modularity of the 3-core (0.998) indicates strong community structure — tightly clustered groups with very little cross-community linking. At 7.38%, the giant component is small; 91.5% of vertices are isolated or in tiny clusters, consistent with the 76.3% match rate and many referenced documents missing from the dataset.
 
 ## Failure categories (top 500 from 397,365 total)
 
@@ -331,11 +348,11 @@ Top authorities (by PageRank) are all `STATE` messages. Top broadcasters (by out
 
 | Path | Lines | Description |
 |---|---|---|
+| `src/date_utils.py` | — | Shared date parsing: `parse_date()` (attribute strings), `parse_dtg()` (DTG components) |
+| `src/date_normalize.py` | — | Date normalizer: all date-bearing fields, `CoverageTracker`, same CLI style |
 | `src/reftel_normalize.py` | 567 | Main normalizer: rebulk functional pattern, `_parse_single_ref()`, `CoverageTracker`, CLI |
-| `src/tags_normalize.py` | 379 | TAGS normalizer/classifier, same CLI style (see `docs/tags_coverage.md`) |
-| `src/reftel2graph.py` | 109 | GraphML builder from normalized (reftel + TAGS joined) NDJSON |
+| `src/tags_normalize.py` | 379 | TAGS normalizer/classifier, same CLI style |
 | `src/station_data.py` | 1844 | 558 canonical stations + 686 variant mappings |
-| `src/station_index.py` | — | StationIndex class (not used by normalizer; uses `_STATIONS` dict directly) |
 | `*.reftel.ndjson` | input | Per-year NDJSON with `document_number`, `date`, `attr_reference`, `reference`, `message_preview` |
 
 # Normalizer architecture

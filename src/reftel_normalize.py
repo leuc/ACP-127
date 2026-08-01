@@ -10,9 +10,14 @@ MRN format, and outputs NDJSON. Date fields are converted to ISO 8601.
 
     Output format (one JSON line per document)::
 
-        {"document_number": "1973AMMAN03057", "date": "1973-06-07",
-         "extracted_references": ["73STATE93410"],
+        {"document_number": "1973AMMAN03057", "document_number_raw": "1973 AMMAN 03057",
+         "date": "1973-06-07", "extracted_references": ["73STATE93410"],
          "message_preview": "..."}
+
+``document_number_raw`` is the un-normalized value straight from the input's
+``document_number`` field (pre-``_normalize_doc_number()``), kept so callers
+can back-reference the source document even after ``document_number`` has
+been rewritten to canonical MRN form.
 """
 
 from __future__ import annotations
@@ -22,12 +27,12 @@ import os
 import re
 import sys
 from collections import defaultdict
-from datetime import datetime
 
 _src_dir = os.path.dirname(os.path.abspath(__file__))
 if _src_dir not in sys.path:
     sys.path.insert(0, _src_dir)
 
+from date_utils import parse_date
 from station_data import STATIONS, _STOP_STATIONS, _SENDER_DATE_STATIONS
 
 # ── Station Compilation (No Wildcards, Longest Match First) ─────────────────
@@ -142,26 +147,24 @@ _MRN_PATTERNS = [
 # ── Core Functions ─────────────────────────────────────────────────────────
 
 def _parse_document_date(date_str: str) -> tuple[str, str]:
+    """Parse a document date string into (iso_date, 2-digit doc_year).
+
+    Delegates the actual format matching to src/date_utils.py::parse_date
+    (shared with src/date_normalize.py and src/tags_normalize.py) so all
+    date parsing lives in one place. Falls back to the raw text with an
+    empty doc_year if unparseable, preserving this function's original
+    contract for callers.
+    """
     text = date_str.strip()
     if not text:
         return "", ""
-    
-    formats = [
-        "%d %b %Y",
-        "%d-%b-%Y %I:%M:%S %p",
-        "%d-%b-%Y"
-    ]
-    
-    for fmt in formats:
-        try:
-            dt = datetime.strptime(text, fmt)
-            iso_date = dt.strftime("%Y-%m-%dT%H:%M:%S") if "%I" in fmt else dt.strftime("%Y-%m-%d")
-            doc_year = dt.strftime("%y")
-            return iso_date, doc_year
-        except ValueError:
-            continue
-            
-    return text, ""
+
+    iso_date = parse_date(text)
+    if iso_date is None:
+        return text, ""
+
+    doc_year = iso_date[2:4]
+    return iso_date, doc_year
 
 def _clean_number(n: str) -> str:
     n = n.lstrip("0")
@@ -417,9 +420,10 @@ def main():
             
             coverage.record_doc(ref_count, len(extracted_mrns))
             doc_number_norm = _normalize_doc_number(doc_number)
-            
+
             result_doc = {
                 "document_number": doc_number_norm or doc_number,
+                "document_number_raw": doc_number or None,
                 "date": iso_date,
                 "extracted_references": extracted_mrns if extracted_mrns else None,
             }

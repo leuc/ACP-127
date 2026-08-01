@@ -11,9 +11,15 @@ results/<year>.ndjson) and outputs NDJSON, one line per document.
 
     Output format (one JSON line per document)::
 
-        {"document_number": "75ABIDJAN4622", "date": "1975-06-04",
+        {"document_number": "75ABIDJAN4622", "document_number_raw": "1975ABIDJAN04622",
+         "date": "1975-06-04",
          "tags": [{"code": "ASEC", "type": "permanent", "name": "Security",
                     "sources": ["attr", "body"]}, ...]}
+
+``document_number_raw`` is the un-normalized value straight from the input's
+``document_number`` field (pre-``_normalize_doc_number()``), kept so callers
+can back-reference the source document even after ``document_number`` has
+been rewritten to canonical MRN form.
 
 Two independent sources are read per document -- ``Message Attributes.TAGS``
 (the raw attribute string) and ``_tags`` (the raw TAGS line captured from the
@@ -367,6 +373,7 @@ def main():
 
             result_doc = {
                 "document_number": doc_number_norm or doc_number,
+                "document_number_raw": doc_number or None,
                 "date": iso_date,
                 "tags": merged,
             }
