@@ -343,16 +343,58 @@ dependency).
 
 ## Normalizer performance
 
-| Year | Docs | Refs | Matched | Rate | Time |
-|---|---|---|---|---|---|
-| 1973 | 155,278 | 210,904 | 156,091 | 74.0% | 7.2s |
-| 1974 | 239,348 | 236,280 | 181,294 | 76.7% | — |
-| 1975 | 275,335 | 266,178 | 207,490 | 78.0% | — |
-| 1976 | 288,088 | 232,871 | 180,691 | 77.6% | — |
-| 1977 | 296,299 | 243,413 | 189,847 | 78.0% | — |
-| 1978 | 304,641 | 231,370 | 181,697 | 78.5% | — |
-| 1979 | 522,283 | 252,831 | 179,372 | 70.9% | — |
-| **Total** | **2,081,272** | **1,673,847** | **1,276,482** | **76.3%** | **51.0s** |
+As of 2026-08-01, after the DTG whitespace-tolerance fix (see "DTG extraction
+coverage" below) and a full pipeline regeneration:
+
+| Year | Docs | Refs | Matched | Rate |
+|---|---|---|---|---|
+| 1973 | 155,278 | 203,275 | 139,888 | 68.8% |
+| 1974 | 289,766 | 334,860 | 212,772 | 63.5% |
+| 1975 | 333,133 | 582,622 | 429,506 | 73.7% |
+| 1976 | 347,422 | 565,609 | 454,038 | 80.3% |
+| 1977 | 307,219 | 573,119 | 454,471 | 79.3% |
+| 1978 | 325,458 | 620,089 | 485,950 | 78.4% |
+| 1979 | 322,996 | 614,473 | 478,054 | 77.8% |
+| **Total** | **2,081,272** | **3,494,047** | **2,654,679** | **76.0%** |
+
+See `results/coverage/coverage-<year>.txt` for the current per-year detail
+(top failing strings, station-resolution breakdown) — regenerated alongside
+`results/<year>.ndjson` any time the extractor or a normalizer changes.
+
+## DTG extraction coverage
+
+`src/patterns/dtg.py`'s DTG regex originally required a rigid, contiguous
+`[ZOPR] DDHHMMZ MON YY` line. Per-year `_dtg` match rates were wildly
+inconsistent (1973: 61.5%, 1976: 77.3%, 1979: 95.5%) because 1973-era source
+text carries far more NARA reproduction spacing noise than later years
+(see "Data provenance" above — this is reproduction noise, not OCR).
+Analysis of 1973's ~43,500 undermatched documents showed ~90% had a
+syntactically valid DTG broken only by injected whitespace mid-token
+(`P 251346 Z JUN 7 3`). Fixed 2026-08-01 by matching each fixed-width DTG
+component character-by-character with optional `\s*` between characters
+(the same technique `section_marker.py::_spaced_alternation` uses for
+spaced classification strings), plus an optional Z suffix, full month-name
+spelling, and a discarded trailing same-line routing/circuit token.
+
+| Year | Docs | Old `_dtg` rate | New `_dtg` rate |
+|---|---|---|---|
+| 1973 | 155,278 | 61.51% | 89.08% |
+| 1974 | 289,766 | 91.50% | 93.96% |
+| 1975 | 333,133 | 87.30% | 90.06% |
+| 1976 | 347,422 | 77.35% | 80.62% |
+| 1977 | 307,219 | 94.16% | 97.52% |
+| 1978 | 325,458 | 95.54% | 98.75% |
+| 1979 | 322,996 | 95.49% | 98.64% |
+| **Total** | **2,081,272** | **87.87%** | **92.75%** |
+
+Normalized against documents with retrievable text only (`Locator` contains
+`TEXT ON-LINE`), the fix reaches near-ceiling: 1973 99.1%, 1976 97.6%. The
+remaining per-year document-level gap is now dominated by documents with no
+retrievable text at all, not by extraction misses. See
+`results/coverage/dtg-coverage-20260801.txt` for the full writeup, including
+the small remaining failure modes (7-digit garbled DDHHMM runs, missing
+leading digits) left unmatched by design since which digit is spurious is
+ambiguous.
 
 ## Failure categories (top 500 from 397,365 total)
 

@@ -77,7 +77,7 @@ class ExtractClassificationMarker(Rule):
         if not valid:
             return False
 
-        unique_values = list(dict.fromkeys(m.raw.strip().upper() for m in valid))
+        unique_values = list(dict.fromkeys(m.value for m in valid))
         return text_end, attr_start, cm_matches, valid, unique_values
 
     def _filter_adjacent(self, cm_matches, matches, text_end, attr_start):

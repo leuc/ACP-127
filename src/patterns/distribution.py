@@ -15,6 +15,7 @@ from ..rules.message_content import BuildMessageContent
 
 _CODE_RE = re.compile(r"(?P<code>\w+)-(?P<count>\d+)")
 _SUM_RE = re.compile(r"/\s*(?P<expected>\d+)(?:\s+[RW])?\s*$", re.MULTILINE)
+_DASH_BOUNDARY_RE = re.compile(r"^\s{4,}\-{10,}", re.MULTILINE)
 
 
 def _validate_sum(parsed, text):
@@ -93,9 +94,11 @@ class ParseDistribution(Rule):
         mc_text = mc[0].value
         mc_start = mc[0].start
 
-        # Find first ACTION or ORIGIN line — distribution starts there
-        act = re.search(r"^ACTION\b", mc_text, re.MULTILINE)
-        org = re.search(r"^ORIGIN\b", mc_text, re.MULTILINE)
+        # Find first ACTION or ORIGIN line — distribution starts there.
+        # Leading whitespace before the keyword (a NARA reproduction
+        # spacing artifact, same class as the DTG issue) is tolerated.
+        act = re.search(r"^[ \t]*ACTION\b", mc_text, re.MULTILINE)
+        org = re.search(r"^[ \t]*ORIGIN\b", mc_text, re.MULTILINE)
         dist_start = None
         if act and org:
             dist_start = min(act.start(), org.start())
@@ -106,13 +109,25 @@ class ParseDistribution(Rule):
         else:
             return False
 
-        # Find /N sum line to determine distribution end
+        # Find /N sum line to determine distribution end. Some documents
+        # replace the numeric "/NNN" copy count with a non-numeric token
+        # (e.g. "( ISO )") — when no sum marker is found, fall back to the
+        # dash counter line (or the FM line) as the end boundary instead,
+        # same fallback order as drafting.py's metadata-region search.
         sum_m = _SUM_RE.search(mc_text, dist_start)
-        if not sum_m:
-            return False
-
-        sum_end = mc_text.find("\n", sum_m.end())
-        dist_end = sum_end + 1 if sum_end >= 0 else len(mc_text)
+        if sum_m:
+            sum_end = mc_text.find("\n", sum_m.end())
+            dist_end = sum_end + 1 if sum_end >= 0 else len(mc_text)
+        else:
+            dash_m = _DASH_BOUNDARY_RE.search(mc_text, dist_start)
+            if dash_m:
+                dist_end = dash_m.start()
+            else:
+                region_start = mc_start + dist_start
+                from_ms = [m for m in matches.named("from") if m.start >= region_start]
+                if not from_ms:
+                    return False
+                dist_end = min(m.start for m in from_ms) - mc_start
 
         dist_text = mc_text[dist_start:dist_end]
 

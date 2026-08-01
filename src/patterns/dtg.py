@@ -10,6 +10,19 @@ calendar validation, and precedence-letter mapping happen downstream in
 src/date_utils.py::parse_dtg (see src/date_normalize.py), so rebulk stays
 extraction-only and all date parsing lives in one shared place.
 
+Per AGENTS.md, the source text carries NARA reproduction noise, not OCR
+noise — the dominant artifact on DTG lines is stray whitespace injected
+mid-token ("JUN 7 3", "251346 Z"), not character substitution.  Every
+fixed-width piece of the DTG is therefore matched digit-by-digit /
+letter-by-letter with optional `\\s*` between characters (same technique
+`section_marker.py::_spaced_alternation` uses for spaced classifications),
+which recovered ~96% of an otherwise-unmatched sample. The Z zone suffix is
+optional (some lines drop it entirely) and a trailing same-line token (a
+routing/circuit designator like "ZDK", "ZFF-4") is consumed but discarded
+so it doesn't pollute _message_content. Months are also accepted spelled in
+full ("JUNE") since that variant appears alongside the standard 3-letter
+form; `_raw_dtg` normalizes both spacing and full-month spelling away.
+
 Output fields:
   _dtg — {raw, precedence_raw, dd, hh, mm, mon, yy}
 
@@ -19,21 +32,46 @@ Stripped from message_content after extraction.
 from rebulk import Rebulk, Rule
 from rebulk.remodule import re
 
-_MONTH_NAMES = [
-    "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
-    "JUL", "AUG", "SEP", "OCT", "NOV", "DEC",
-]
+_MONTH_FULL = {
+    "JAN": "JANUARY", "FEB": "FEBRUARY", "MAR": "MARCH", "APR": "APRIL",
+    "MAY": "MAY", "JUN": "JUNE", "JUL": "JULY", "AUG": "AUGUST",
+    "SEP": "SEPTEMBER", "OCT": "OCTOBER", "NOV": "NOVEMBER", "DEC": "DECEMBER",
+}
+_MONTH_NAMES = list(_MONTH_FULL)
 
-_MONTH_PAT = "|".join(_MONTH_NAMES)
+
+def _spaced(literal):
+    """Join a literal's characters with `\\s*` to tolerate injected whitespace."""
+    return r"\s*".join(re.escape(c) for c in literal)
+
+
+def _spaced_digits(n):
+    return r"\s*".join([r"\d"] * n)
+
+
+def _month_pattern(abbr):
+    """3-letter abbreviation, with the rest of the full name optional."""
+    rest = _MONTH_FULL[abbr][3:]
+    if rest:
+        return _spaced(abbr) + r"(?:" + _spaced(rest) + r")?"
+    return _spaced(abbr)
+
+
+_MONTH_PAT = "|".join(_month_pattern(m) for m in _MONTH_NAMES)
 
 _DTG_RE = re.compile(
-    rf"^(?P<full>(?:[ZOPR] [ZOPR] |[ZOPR] )(?P<dd>\d{{2}})(?P<hh>\d{{2}})(?P<mm>\d{{2}})Z (?P<mon>{_MONTH_PAT}) (?P<yy>\d{{2}}))\s*$",
+    r"^[ \t]*(?P<full>(?:[ZOPR]\s+[ZOPR]\s+|[ZOPR]\s+)"
+    rf"(?P<dd>{_spaced_digits(2)})(?P<hh>{_spaced_digits(2)})(?P<mm>{_spaced_digits(2)})"
+    r"\s*Z?\s+"
+    rf"(?P<mon>{_MONTH_PAT})"
+    rf"\s+(?P<yy>{_spaced_digits(2)}))"
+    r"(?:[ \t]+\S.*)?\s*$",
     re.MULTILINE,
 )
 
 
 def _raw_dtg(line):
-    """Return the raw captured DTG components, unparsed."""
+    """Return the raw captured DTG components, unparsed (whitespace collapsed)."""
     m = _DTG_RE.match(line)
     if not m:
         return None
@@ -42,11 +80,11 @@ def _raw_dtg(line):
     return {
         "raw": g["full"],
         "precedence_raw": precedence_raw,
-        "dd": g["dd"],
-        "hh": g["hh"],
-        "mm": g["mm"],
-        "mon": g["mon"],
-        "yy": g["yy"],
+        "dd": re.sub(r"\s+", "", g["dd"]),
+        "hh": re.sub(r"\s+", "", g["hh"]),
+        "mm": re.sub(r"\s+", "", g["mm"]),
+        "mon": re.sub(r"\s+", "", g["mon"])[:3],
+        "yy": re.sub(r"\s+", "", g["yy"]),
     }
 
 
