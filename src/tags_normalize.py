@@ -12,7 +12,6 @@ results/<year>.ndjson) and outputs NDJSON, one line per document.
     Output format (one JSON line per document)::
 
         {"document_number": "75ABIDJAN4622", "document_number_raw": "1975ABIDJAN04622",
-         "date": "1975-06-04",
          "tags": [{"code": "ASEC", "type": "permanent", "name": "Security",
                     "sources": ["attr", "body"]}, ...]}
 
@@ -46,7 +45,7 @@ _src_dir = os.path.dirname(os.path.abspath(__file__))
 if _src_dir not in sys.path:
     sys.path.insert(0, _src_dir)
 
-from reftel_normalize import _normalize_doc_number, _parse_document_date
+from reftel_normalize import _normalize_doc_number
 from tags_mapping import classify_subject_tag, lookup_organization_tag, lookup_geographic_tag
 
 # ── Token splitting (paren-aware -- do not split inside "(LASTNAME, FIRST)") ─
@@ -340,10 +339,9 @@ def read_tags(path: str):
                 continue
             attrs = obj.get("Message Attributes") or {}
             doc_number = attrs.get("Document Number") or ""
-            date = attrs.get("Draft Date") or attrs.get("Sent Date") or ""
             tags_attr = attrs.get("TAGS")
             tags_body = obj.get("_tags")
-            yield doc_number, date, tags_attr, tags_body
+            yield doc_number, tags_attr, tags_body
 
 
 def main():
@@ -361,8 +359,7 @@ def main():
 
     for path in paths:
         sys.stderr.write(f"Processing {path} ...\n")
-        for doc_number, doc_date, tags_attr, tags_body in read_tags(path):
-            iso_date, _ = _parse_document_date(doc_date)
+        for doc_number, tags_attr, tags_body in read_tags(path):
             doc_number_norm = _normalize_doc_number(doc_number)
 
             attr_entries = _classify_source(tags_attr, "attr", coverage)
@@ -374,7 +371,6 @@ def main():
             result_doc = {
                 "document_number": doc_number_norm or doc_number,
                 "document_number_raw": doc_number or None,
-                "date": iso_date,
                 "tags": merged,
             }
             out.write(json.dumps(result_doc, ensure_ascii=False) + "\n")

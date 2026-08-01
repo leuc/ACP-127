@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Date normalizer for ACP-127 messages: parses every date-bearing field --
-the body DTG line and all Message-Attribute date keys -- into ISO 8601.
+the body DTG line, the dash-counter filing time, and all Message-Attribute
+date keys -- into ISO 8601.
 
 Reads per-document NDJSON files (the full extractor output, e.g.
 results/<year>.ndjson) and outputs NDJSON, one line per document. rebulk
-(src/patterns/dtg.py, src/patterns/attributes.py) only extracts raw date
-text/components; all parsing lives in src/date_utils.py, invoked from here,
-so it can be audited and covered in one place instead of scattered across
-the pipeline.
+(src/patterns/dtg.py, src/patterns/attributes.py, src/patterns/dash_counter.py)
+only extracts raw date text/components; all parsing lives in
+src/date_utils.py, invoked from here, so it can be audited and covered in one
+place instead of scattered across the pipeline.
 
     Usage::
 
@@ -16,18 +17,23 @@ the pipeline.
     Output format (one JSON line per document)::
 
         {"document_number": "1973ABUDH00866", "document_number_raw": "1973ABUDH00866",
-         "document_date": "1973-06-27",
-         "doc_year": "73",
-         "dtg": {"raw": "...", "precedence": ["PRIORITY"], "date_iso": "..."},
-         "dates": {"Capture Date": "1994-01-01", "Draft Date": "1973-06-27", ...}}
+         "dtg": {"raw": "...", "precedence": ["PRIORITY"], "datetime_iso": "..."},
+         "filing_time_raw": "201212Z",
+         "filing_datetime_iso": "1973-06-20T12:12:00Z",
+         "dates": {"capture_date": "1994-01-01", "draft_date": "1973-06-27", ...}}
 
-``document_date`` prefers ``Draft Date``, falling back to ``Sent Date`` --
-the same priority already used by src/reftel_normalize.py and
-src/tags_normalize.py. ``document_number_raw`` is the un-normalized value
-straight from ``Message Attributes.Document Number`` (pre-
-``_normalize_doc_number()``), kept so callers can back-reference the source
-document even after ``document_number`` has been rewritten to canonical MRN
-form.
+This module deliberately does NOT pick a single "document date" -- every
+field is exposed independently, 1:1 named to its source, so a downstream
+consumer decides its own priority (see src/reftel_normalize.py, which has a
+genuine internal need for one resolved date and makes that choice itself,
+explicitly, off these same raw fields). ``filing_time_raw`` is the bare
+day/hour/minute/Z fragment from ``_dash_counters.filing_time`` (it has no
+month/year of its own); ``filing_datetime_iso`` reconstructs a full datetime
+by borrowing month/year from the same document's DTG. ``document_number_raw``
+is the un-normalized value straight from ``Message Attributes.Document
+Number`` (pre-``_normalize_doc_number()``), kept so callers can
+back-reference the source document even after ``document_number`` has been
+rewritten to canonical MRN form.
 """
 
 from __future__ import annotations
@@ -41,7 +47,7 @@ _src_dir = os.path.dirname(os.path.abspath(__file__))
 if _src_dir not in sys.path:
     sys.path.insert(0, _src_dir)
 
-from date_utils import parse_date, parse_dtg
+from date_utils import parse_date, parse_dtg, reconstruct_filing_datetime
 from reftel_normalize import _normalize_doc_number
 
 _DATE_ATTRS = [
@@ -56,7 +62,12 @@ _DATE_ATTRS = [
     "Sent Date",
 ]
 
-_ALL_FIELDS = _DATE_ATTRS + ["dtg"]
+# 1:1 map from the verbatim Message Attributes key to the output field name --
+# attrs.get(name) below still uses the space-form key; only the JSON output
+# key is snake_case.
+_ATTR_OUTPUT_KEYS = {name: name.lower().replace(" ", "_") for name in _DATE_ATTRS}
+
+_ALL_FIELDS = _DATE_ATTRS + ["dtg", "filing_time"]
 
 _MAX_EXAMPLES = 10
 
@@ -91,6 +102,15 @@ class CoverageTracker:
             self.parsed_ok["dtg"] += 1
         elif len(self.failed_examples["dtg"]) < _MAX_EXAMPLES:
             self.failed_examples["dtg"].append(str(raw_components)[:120])
+
+    def record_filing_time(self, raw, parsed_value):
+        if not raw:
+            return
+        self.raw_present["filing_time"] += 1
+        if parsed_value:
+            self.parsed_ok["filing_time"] += 1
+        elif len(self.failed_examples["filing_time"]) < _MAX_EXAMPLES:
+            self.failed_examples["filing_time"].append(str(raw)[:120])
 
     def print_report(self, source_files: list[str], output_path: str | None):
         def pct(n, d):
@@ -133,7 +153,8 @@ def read_dates(path: str):
             doc_number = attrs.get("Document Number") or ""
             raw_dates = {name: attrs.get(name) for name in _DATE_ATTRS}
             dtg_raw = obj.get("_dtg")
-            yield doc_number, raw_dates, dtg_raw
+            filing_time_raw = (obj.get("_dash_counters") or {}).get("filing_time")
+            yield doc_number, raw_dates, dtg_raw, filing_time_raw
 
 
 def main():
@@ -151,29 +172,29 @@ def main():
 
     for path in paths:
         sys.stderr.write(f"Processing {path} ...\n")
-        for doc_number, raw_dates, dtg_raw in read_dates(path):
+        for doc_number, raw_dates, dtg_raw, filing_time_raw in read_dates(path):
             coverage.record_doc()
 
             parsed_dates = {}
             for name, raw in raw_dates.items():
                 iso = parse_date(raw) if raw else None
-                parsed_dates[name] = iso
+                parsed_dates[_ATTR_OUTPUT_KEYS[name]] = iso
                 coverage.record_attr(name, raw, iso)
 
             dtg_parsed = parse_dtg(dtg_raw) if dtg_raw else None
             coverage.record_dtg(dtg_raw, dtg_parsed)
 
-            document_date = parsed_dates.get("Draft Date") or parsed_dates.get("Sent Date")
-            doc_year = document_date[2:4] if document_date else None
+            filing_datetime_iso = reconstruct_filing_datetime(filing_time_raw, dtg_raw)
+            coverage.record_filing_time(filing_time_raw, filing_datetime_iso)
 
             doc_number_norm = _normalize_doc_number(doc_number)
 
             result_doc = {
                 "document_number": doc_number_norm or doc_number,
                 "document_number_raw": doc_number or None,
-                "document_date": document_date,
-                "doc_year": doc_year,
                 "dtg": dtg_parsed,
+                "filing_time_raw": filing_time_raw,
+                "filing_datetime_iso": filing_datetime_iso,
                 "dates": parsed_dates,
             }
             out.write(json.dumps(result_doc, ensure_ascii=False) + "\n")

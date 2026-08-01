@@ -11,7 +11,7 @@ MRN format, and outputs NDJSON. Date fields are converted to ISO 8601.
     Output format (one JSON line per document)::
 
         {"document_number": "1973AMMAN03057", "document_number_raw": "1973 AMMAN 03057",
-         "date": "1973-06-07", "extracted_references": ["73STATE93410"],
+         "date": "1973-06-07", "date_source": "dtg", "extracted_references": ["73STATE93410"],
          "message_preview": "..."}
 
 ``document_number_raw`` is the un-normalized value straight from the input's
@@ -32,7 +32,7 @@ _src_dir = os.path.dirname(os.path.abspath(__file__))
 if _src_dir not in sys.path:
     sys.path.insert(0, _src_dir)
 
-from date_utils import parse_date
+from date_utils import parse_date, parse_dtg
 from station_data import STATIONS, _STOP_STATIONS, _SENDER_DATE_STATIONS
 
 # ── Station Compilation (No Wildcards, Longest Match First) ─────────────────
@@ -146,25 +146,36 @@ _MRN_PATTERNS = [
 
 # ── Core Functions ─────────────────────────────────────────────────────────
 
-def _parse_document_date(date_str: str) -> tuple[str, str]:
-    """Parse a document date string into (iso_date, 2-digit doc_year).
+def _parse_document_date(dtg_raw: dict | None, draft_date_str: str, sent_date_str: str) -> tuple[str, str, str]:
+    """Resolve a single document date into (iso_date, 2-digit doc_year, date_source).
 
-    Delegates the actual format matching to src/date_utils.py::parse_date
-    (shared with src/date_normalize.py and src/tags_normalize.py) so all
-    date parsing lives in one place. Falls back to the raw text with an
-    empty doc_year if unparseable, preserving this function's original
-    contract for callers.
+    The message's own DTG (src/patterns/dtg.py, parsed via
+    src/date_utils.py::parse_dtg) is preferred -- it's the message's actual
+    date, extracted from the message header itself, whereas Draft Date/Sent
+    Date are NARA administrative metadata dates that are frequently absent
+    entirely. Falls back to Draft Date, then Sent Date (via
+    src/date_utils.py::parse_date, shared with src/date_normalize.py) only
+    when the DTG doesn't parse. date_source records which one won ("dtg",
+    "draft", "sent", or "" if none parsed), so callers can audit the choice.
+    This is the one place in the pipeline that still resolves a single date
+    from multiple candidates -- MRN station-year matching genuinely needs
+    exactly one year, unlike src/date_normalize.py which exposes every field
+    independently and lets the consumer choose.
     """
-    text = date_str.strip()
-    if not text:
-        return "", ""
+    dtg_parsed = parse_dtg(dtg_raw) if dtg_raw else None
+    if dtg_parsed is not None:
+        iso_date = dtg_parsed["datetime_iso"][:10]
+        return iso_date, iso_date[2:4], "dtg"
 
-    iso_date = parse_date(text)
-    if iso_date is None:
-        return text, ""
+    draft_iso = parse_date(draft_date_str) if draft_date_str else None
+    if draft_iso is not None:
+        return draft_iso, draft_iso[2:4], "draft"
 
-    doc_year = iso_date[2:4]
-    return iso_date, doc_year
+    sent_iso = parse_date(sent_date_str) if sent_date_str else None
+    if sent_iso is not None:
+        return sent_iso, sent_iso[2:4], "sent"
+
+    return "", "", ""
 
 def _clean_number(n: str) -> str:
     n = n.lstrip("0")
@@ -340,11 +351,13 @@ def read_reftel(path: str):
             except json.JSONDecodeError:
                 continue
             doc = obj.get("document_number") or ""
-            date = obj.get("date") or ""
+            draft_date = obj.get("draft_date") or ""
+            sent_date = obj.get("sent_date") or ""
+            dtg_raw = obj.get("dtg")
             attr_ref = obj.get("attr_reference") or ""
             ref_list = obj.get("references")
             message_preview = obj.get("message_preview")
-            yield doc, date, attr_ref, ref_list, message_preview
+            yield doc, draft_date, sent_date, dtg_raw, attr_ref, ref_list, message_preview
 
 def main():
     if len(sys.argv) < 2:
@@ -368,8 +381,8 @@ def main():
         total_cables = 0
         total_airgrams = 0
 
-        for doc_number, doc_date, attr_ref, ref_list, message_preview in read_reftel(path):
-            iso_date, doc_year = _parse_document_date(doc_date)
+        for doc_number, draft_date, sent_date, dtg_raw, attr_ref, ref_list, message_preview in read_reftel(path):
+            iso_date, doc_year, date_source = _parse_document_date(dtg_raw, draft_date, sent_date)
             
             # Stage 1: Gather EVERYTHING for rigorous splitting
             raw_tokens = []
@@ -425,6 +438,7 @@ def main():
                 "document_number": doc_number_norm or doc_number,
                 "document_number_raw": doc_number or None,
                 "date": iso_date,
+                "date_source": date_source,
                 "extracted_references": extracted_mrns if extracted_mrns else None,
             }
             if message_preview:

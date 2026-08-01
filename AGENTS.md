@@ -251,12 +251,23 @@ text — it never parses a date to ISO or validates a calendar. All date parsing
 
 `src/date_utils.py` provides:
 - `parse_date(raw: str) -> str | None` — parses an attribute date string (formats: `%d %b %Y`,
-  `%d-%b-%Y %I:%M:%S %p`, `%d-%b-%Y`, `%d/%m/%Y`, plus already-ISO passthrough) into ISO 8601, or
-  `None` if unparseable.
+  `%d-%b-%Y %I:%M:%S %p`, `%d-%b-%Y`, `%d/%m/%Y`, plus already-ISO passthrough) into a bare ISO
+  date (`YYYY-MM-DD`), or `None` if unparseable. Always date-only, even for formats with a time
+  component — every Message-Attribute date's time-of-day, when present, is exactly midnight (NARA
+  export padding, never real sub-day precision), so keeping it would just make output shape
+  inconsistent across documents for no informational gain.
 - `parse_dtg(components: dict) -> dict | None` — takes `_dtg`'s raw components and returns
-  `{raw, precedence, date_iso}` (the shape `_dtg` used to have inline), applying the 2-digit→
+  `{raw, precedence, datetime_iso}` (the shape `_dtg` used to have inline), applying the 2-digit→
   4-digit century heuristic, calendar validation, and the 1973-1979 plausibility clamp. Returns
-  `None` if invalid.
+  `None` if invalid. Named `datetime_iso` (not `date_iso`) because the DTG's `HH`/`MM` are genuine
+  transmission-time precision from the message header itself — unlike attribute dates, this is not
+  padding, so it isn't stripped.
+- `reconstruct_filing_datetime(filing_time: str | None, dtg_components: dict | None) -> str | None`
+  — `_dash_counters.filing_time` (see `src/patterns/dash_counter.py`) is a bare `DDHHMMZ` fragment
+  with no month/year of its own. This borrows `mon`/`yy` from the same document's `_dtg`
+  components (the filing event and the message DTG are the same transmission) to reconstruct a
+  full `%Y-%m-%dT%H:%M:%SZ` datetime, applying the same bounds/calendar validation as `parse_dtg`.
+  Returns `None` if either input is missing/invalid.
 
 `src/date_normalize.py` is the CLI that runs this over a corpus, mirroring
 `src/reftel_normalize.py`/`src/tags_normalize.py`'s shape exactly (same `CoverageTracker` +
@@ -264,11 +275,16 @@ text — it never parses a date to ISO or validates a calendar. All date parsing
 
     python3 -m src.date_normalize <file.ndjson> [...] > output.ndjson
 
-Per document, output is `{document_number, document_number_raw, document_date, doc_year, dtg,
-dates}` where `document_date` prefers `Draft Date` and falls back to `Sent Date` (same priority
-`src/reftel_normalize.py`/`src/tags_normalize.py` already use), and `dates` holds one normalized
-ISO value (or `null`) per attribute date field. Its stderr report gives per-field raw-presence
-and parse-success/failure rates — the audit surface for "is this date field actually parseable."
+Per document, output is `{document_number, document_number_raw, dtg, filing_time_raw,
+filing_datetime_iso, dates}`. This module deliberately does **not** pick a single "document date" —
+`Draft Date` and `Sent Date` are two semantically distinct fields (one administrative, one often
+absent entirely) and blending them into one opaque field hid which one won and produced
+inconsistent output shape. Instead every field is exposed independently, 1:1 named to its source
+(`dates` keys are the snake_case form of the attribute name — `draft_date`, `sent_date`, etc.), and
+a downstream consumer decides its own priority — see `src/reftel_normalize.py` below, which has a
+genuine internal need for one resolved date and makes that choice itself, explicitly. Its stderr
+report gives per-field raw-presence and parse-success/failure rates — the audit surface for "is
+this date field actually parseable."
 
 `document_number_raw` is the un-normalized `Document Number` attribute value, straight from the
 input, before `_normalize_doc_number()` rewrites `document_number` to canonical MRN form. All
@@ -276,9 +292,13 @@ three normalizers (`date_normalize.py`, `reftel_normalize.py`, `tags_normalize.p
 field so a caller can always trace a normalized `document_number` back to its exact source
 document.
 
-`src/reftel_normalize.py::_parse_document_date` delegates to `date_utils.parse_date` rather than
-maintaining its own format list; `src/tags_normalize.py` inherits this via its existing import of
-`_parse_document_date`.
+`src/reftel_normalize.py::_parse_document_date` is the one place a single resolved date is still
+computed — MRN station-year matching genuinely needs exactly one year. It prefers the message's
+own DTG (via `date_utils.parse_dtg`, truncated to `YYYY-MM-DD`) over `Draft Date`/`Sent Date` (via
+`date_utils.parse_date`), since the DTG is the message's actual date while the two attributes are
+NARA administrative metadata dates that are frequently absent. It records which source won as
+`date_source` (`"dtg"`, `"draft"`, `"sent"`, or `""`) for auditability. `src/tags_normalize.py`
+doesn't need a document date at all and has no date handling.
 
 # Reference Normalization Pipeline
 
@@ -293,16 +313,16 @@ The reference normalization pipeline converts raw ACP-127 reference strings into
 2. **Flatten to reftel NDJSON** (extracts only relevant fields for faster loading):
 
         for year in {1973..1979}; do
-          jq -Mc '{"references": ._reference, "attr_reference": ."Message Attributes"."Reference", "document_number": ."Message Attributes"."Document Number", "date": ."Message Attributes"."Draft Date" // ."Message Attributes"."Sent Date", "message_preview": (._message_content | if . then split("\n")[:100] | join("\n") else null end)}' results/${year}.ndjson > results/${year}.reftel.ndjson
+          jq -Mc '{"references": ._reference, "attr_reference": ."Message Attributes"."Reference", "document_number": ."Message Attributes"."Document Number", "draft_date": ."Message Attributes"."Draft Date", "sent_date": ."Message Attributes"."Sent Date", "dtg": ._dtg, "message_preview": (._message_content | if . then split("\n")[:100] | join("\n") else null end)}' results/${year}.ndjson > results/${year}.reftel.ndjson
         done
 
-   This produces per-year NDJSON files (e.g. `1973.reftel.ndjson`) with `document_number`, `date`, `attr_reference`, `references`, and `message_preview` (first 100 lines of the cleaned body text) fields. Note: `date` here is still the **raw** `Draft Date`/`Sent Date` string — see the "Date normalization" section above for where it actually gets parsed.
+   This produces per-year NDJSON files (e.g. `1973.reftel.ndjson`) with `document_number`, `draft_date`, `sent_date`, `dtg`, `attr_reference`, `references`, and `message_preview` (first 100 lines of the cleaned body text) fields. Note: `draft_date`/`sent_date` here are still **raw** attribute strings and `dtg` is still raw components — no `//` fallback and no parsing happens in jq; see the "Date normalization" section above for where `src/reftel_normalize.py` resolves these into a single date.
 
 3. **Normalize references** to canonical MRN format:
 
         python3 -m src.reftel_normalize *.reftel.ndjson > all-mrns.ndjson
 
-   Reads per-document NDJSON files, normalizes each reference string to `YYSTATIONNNNNN` format using a single rebulk functional pattern with O(1) dict-lookup station matching. Outputs NDJSON with `extracted_references` array and `message_preview` (first 100 lines of body text).
+   Reads per-document NDJSON files, normalizes each reference string to `YYSTATIONNNNNN` format using a single rebulk functional pattern with O(1) dict-lookup station matching. Outputs NDJSON with `date`, `date_source`, `extracted_references` array, and `message_preview` (first 100 lines of body text).
 
    **Data source priority:**
    - Primary: the `references` field (pre-split list of individual references from the message body)
