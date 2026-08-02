@@ -116,3 +116,23 @@ Building a citation graph from `all-mrns-tags.ndjson`, joining in estimated
 dates from `missing-mrn-dates.ndjson` for cited-but-missing MRNs, and other
 downstream research analysis live in the sibling `cable-insights` repo,
 which consumes this NDJSON as its data source.
+
+## Optional: merge estimated dates into all-mrns-tags.ndjson
+
+Both files above are already complete on their own -- this only helps a
+consumer that wants a single file with a `date` for as many nodes as
+possible, including MRNs that only exist as citations:
+
+```bash
+jq -c 'select(.estimated_date != null) | {document_number: .mrn, date: .estimated_date, extracted_references: null, message_preview: null, tags: null, estimate_type, accuracy_days, date_order_inverted}' \
+  results/missing-mrn-dates.ndjson \
+  | cat results/all-mrns-tags.ndjson - > results/all-mrns-tags.estimated.ndjson
+```
+
+Merged rows carry `estimate_type`/`accuracy_days`/`date_order_inverted`
+through so a consumer can tell an estimated row from a real one and judge
+its confidence. Caveat: `reftel2graph.py`'s current loop skips any record
+whose `extracted_references` is falsy, so these merged rows (which always
+have `extracted_references: null`, since the underlying document doesn't
+exist) won't populate node dates there without a corresponding change on
+that side.

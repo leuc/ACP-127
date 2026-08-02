@@ -167,6 +167,32 @@ other corpus-level research analysis (citation graphs, statistical cross-checks,
 investigative writeups) live in the sibling `cable-insights` repo, which
 consumes the NDJSON produced above as its data source.
 
+## Optional: merge estimated dates into all-mrns-tags.ndjson
+
+Not part of the required pipeline -- `all-mrns-tags.ndjson` and
+`missing-mrn-dates.ndjson` are already complete, independently useful
+artifacts on their own. This step only helps a consumer that wants one file
+with a `date` for as many nodes as possible, including MRNs that only exist
+as citations. Resolved missing-MRN estimates are appended as extra records
+(`document_number` = the MRN, `date` = `estimated_date`,
+`extracted_references`/`message_preview`/`tags` all `null` since the
+document itself doesn't exist -- only its estimated date is known -- plus
+`estimate_type`/`accuracy_days`/`date_order_inverted` carried through so a
+consumer can tell an estimated row from a real one and judge its
+confidence):
+
+```bash
+jq -c 'select(.estimated_date != null) | {document_number: .mrn, date: .estimated_date, extracted_references: null, message_preview: null, tags: null, estimate_type, accuracy_days, date_order_inverted}' \
+  results/missing-mrn-dates.ndjson \
+  | cat results/all-mrns-tags.ndjson - > results/all-mrns-tags.estimated.ndjson
+```
+
+**Caveat**: `reftel2graph.py`'s current loop skips any record whose
+`extracted_references` is falsy, so these merged rows won't populate node
+dates there without a corresponding change on that side -- this step
+produces the data, it doesn't change how existing downstream code consumes
+it.
+
 ## Key Files
 
 | File | Description |
