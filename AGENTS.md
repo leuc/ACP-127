@@ -320,7 +320,7 @@ The reference normalization pipeline converts raw ACP-127 reference strings into
 
 3. **Normalize references** to canonical MRN format:
 
-        python3 -m src.reftel_normalize *.reftel.ndjson > all-mrns.ndjson
+        python3 -m src.reftel_normalize results/*.reftel.ndjson > results/all-mrns.ndjson
 
    Reads per-document NDJSON files, normalizes each reference string to `YYSTATIONNNNNN` format using a single rebulk functional pattern with O(1) dict-lookup station matching. Outputs NDJSON with `date`, `date_source`, `extracted_references` array, and `message_preview` (first 100 lines of body text).
 
@@ -332,12 +332,31 @@ The reference normalization pipeline converts raw ACP-127 reference strings into
 
    **Station matching:** 558 canonical stations, 686 variant-to-canonical mappings, all loaded into a flat `_STATIONS` dict for O(1) lookup. ~900 entries total.
 
-4. **Normalize TAGS** the same way:
+4. **Normalize TAGS** the same way (reads the raw per-year files -- TAGS lives
+   in `Message Attributes`/`_tags`, not in the flattened reftel NDJSON):
 
-        python3 -m src.tags_normalize *.new5.ndjson > all-tags.ndjson
+        python3 -m src.tags_normalize results/{1973..1979}.ndjson > results/all-tags.ndjson
 
-This repo's pipeline stops here. Joining reftel + TAGS output, building the
-citation graph, and analyzing it are now part of the sibling `cable-insights`
+5. **Combine** references + TAGS into one joined NDJSON, keyed by
+   `document_number` -- jq only, two passes (build a document_number -> tags
+   index once, then stream-join the mrns file against it, rather than
+   rescanning the tags file per record):
+
+        jq -n '[inputs | {(.document_number): .tags}] | add' results/all-tags.ndjson > results/all-tags.index.json
+        jq -c --slurpfile idx results/all-tags.index.json '
+          $idx[0] as $tags
+          | {document_number, date, extracted_references, message_preview, tags: $tags[.document_number]}
+        ' results/all-mrns.ndjson > results/all-mrns-tags.ndjson
+
+   This is the exact single-file shape
+   `cable-insights/questions/reference-graph-structure/code/reftel2graph.py`
+   expects as input (`document_number`, `extracted_references`, `date`,
+   `message_preview`, `tags`) -- it does not join two files itself, unlike its
+   sibling consumer `tags_reference_similarity.py`, which reads
+   `*.reftel.norm.ndjson`/`*.tags.norm.ndjson` separately and joins in memory.
+
+This repo's pipeline stops here, at `all-mrns-tags.ndjson`. Building the
+citation graph and analyzing it are now part of the sibling `cable-insights`
 repo, which consumes this repo's NDJSON output as its data source (not a code
 dependency).
 

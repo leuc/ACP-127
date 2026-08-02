@@ -97,11 +97,11 @@ cat coverage.json | jq .
 The script uses multiprocessing internally (`ProcessPoolExecutor`), so a simple sequential loop is all that's needed:
 
 ```bash
-mkdir -p results
+mkdir -p results results/coverage
 for year in {1973..1979}; do
     echo "Processing $year ..."
-    python3 -m src.extractor cables/$year/ 2>results/$year-coverage.json >results/$year-results.ndjson
-    count=$(wc -l < "results/$year-results.ndjson")
+    python3 -m src.extractor "cables/us-diplomatic-cables-txt-$year/" 2>"results/coverage/coverage-$year.txt" >"results/$year.ndjson"
+    count=$(wc -l < "results/$year.ndjson")
     echo "Finished $year: $count records"
 done
 ```
@@ -117,30 +117,47 @@ Extract structured reference data from ACP-127 messages and normalize it to a ca
 python3 -m src.extractor <paths...>
 
 # 2. Flatten to reftel NDJSON (extract relevant fields for faster loading)
-#    "date" stays raw here (Draft Date // Sent Date, unparsed) -- see step 3a
+#    draft_date/sent_date/dtg all stay raw here -- see step 3a. reftel_normalize.py
+#    reads these three fields independently and resolves its own single date (step 3b).
 for year in {1973..1979}; do
   jq -Mc '{"references": ._reference, "attr_reference": ."Message Attributes"."Reference",
            "document_number": ."Message Attributes"."Document Number",
-           "date": ."Message Attributes"."Draft Date" // ."Message Attributes"."Sent Date",
+           "draft_date": ."Message Attributes"."Draft Date",
+           "sent_date": ."Message Attributes"."Sent Date",
+           "dtg": ._dtg,
            "message_preview": (._message_content | if . then split("\n")[:100] | join("\n") else null end)}' \
-    ${year}.ndjson > ${year}.reftel.ndjson
+    results/${year}.ndjson > results/${year}.reftel.ndjson
 done
 
 # 3a. Normalize every date-bearing field (body DTG + all Message Attribute
-#     dates) into ISO 8601, with its own coverage report on stderr
-python3 -m src.date_normalize *.ndjson > all-dates.ndjson
+#     dates) into ISO 8601, with its own coverage report on stderr.
+#     Reads the raw per-year files -- list them explicitly, not `*.ndjson`,
+#     or a rerun will also sweep up *.reftel.ndjson/*.dates.ndjson/etc.
+python3 -m src.date_normalize results/{1973..1979}.ndjson > results/all-dates.ndjson
 
 # 3b. Normalize references to canonical MRN format
-python3 -m src.reftel_normalize *.reftel.ndjson > all-mrns.ndjson
+python3 -m src.reftel_normalize results/*.reftel.ndjson > results/all-mrns.ndjson
 
-# 3c. Normalize TAGS the same way
-python3 -m src.tags_normalize *.new5.ndjson > all-tags.ndjson
+# 3c. Normalize TAGS the same way (reads the raw per-year files -- TAGS lives
+#     in "Message Attributes"/_tags, not in the flattened reftel NDJSON)
+python3 -m src.tags_normalize results/{1973..1979}.ndjson > results/all-tags.ndjson
+
+# 4. Combine references + TAGS into one joined NDJSON, keyed by document_number.
+#    This is what `cable-insights/questions/reference-graph-structure/code/reftel2graph.py`
+#    expects as its single input -- jq only, two passes so the tags file is
+#    indexed once rather than re-scanned per mrns record:
+jq -n '[inputs | {(.document_number): .tags}] | add' results/all-tags.ndjson > results/all-tags.index.json
+jq -c --slurpfile idx results/all-tags.index.json '
+  $idx[0] as $tags
+  | {document_number, date, extracted_references, message_preview, tags: $tags[.document_number]}
+' results/all-mrns.ndjson > results/all-mrns-tags.ndjson
 ```
 
-This repo's pipeline stops at extraction + normalization. Graph-building and
-other corpus-level research analysis (citation graphs, statistical cross-checks,
-investigative writeups) now live in the sibling `cable-insights` repo, which
-consumes the NDJSON produced above as its data source.
+This repo's pipeline stops at extraction + normalization (through the combined
+`all-mrns-tags.ndjson`). Graph-building and other corpus-level research
+analysis (citation graphs, statistical cross-checks, investigative writeups)
+live in the sibling `cable-insights` repo, which consumes the NDJSON produced
+above as its data source.
 
 ## Key Files
 

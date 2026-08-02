@@ -21,11 +21,12 @@ Airgram variant: `YYSTATION-ANNNNN` (e.g. `73BANGKOK-A50`).
 ### Pipeline
 
 1. **Extract** structured JSON from ACP-127 messages via `src.extractor`
-2. **Flatten** to reftel NDJSON:
+2. **Flatten** to reftel NDJSON (`draft_date`/`sent_date`/`dtg` stay raw here --
+   `src/reftel_normalize.py` resolves them into one `date` itself, see below):
 
-        jq -Mc '{"references": ._reference, "attr_reference": ."Message Attributes"."Reference", "document_number": ."Message Attributes"."Document Number", "date": ."Message Attributes"."Draft Date" // ."Message Attributes"."Sent Date", "message_preview": (._message_content | if . then split("\n")[:100] | join("\n") else null end)}' input.ndjson > year.reftel.ndjson
+        jq -Mc '{"references": ._reference, "attr_reference": ."Message Attributes"."Reference", "document_number": ."Message Attributes"."Document Number", "draft_date": ."Message Attributes"."Draft Date", "sent_date": ."Message Attributes"."Sent Date", "dtg": ._dtg, "message_preview": (._message_content | if . then split("\n")[:100] | join("\n") else null end)}' results/${year}.ndjson > results/${year}.reftel.ndjson
 
-3. **Read** per-year NDJSON files — yields `(doc_number, date, attr_ref, ref_list, message_preview)`
+3. **Read** per-year NDJSON files — yields `(doc_number, draft_date, sent_date, dtg_raw, attr_ref, ref_list, message_preview)`
 4. **Prefer** `ref_list` (pre-split `references` field) over raw `attr_reference` string
 3. **Clean** each ref string:
    - Strip `REF:/REFTEL:/RETELS:` prefix
@@ -83,12 +84,23 @@ The normalizer does **no splitting** of multi-ref strings. Each ref enters `_par
 
 ```bash
 # Normalize all years
-python3 -m src.reftel_normalize *.reftel.ndjson > all-mrns.ndjson
+python3 -m src.reftel_normalize results/*.reftel.ndjson > results/all-mrns.ndjson
 
-# Normalize TAGS the same way
-python3 -m src.tags_normalize *.new5.ndjson > all-tags.ndjson
+# Normalize TAGS the same way (reads the raw per-year files, not the
+# flattened reftel NDJSON -- TAGS lives in "Message Attributes"/_tags)
+python3 -m src.tags_normalize results/{1973..1979}.ndjson > results/all-tags.ndjson
+
+# Combine references + TAGS into one joined NDJSON, keyed by document_number --
+# jq only, two passes (index the tags file once, then stream-join the mrns
+# file against it). This is the single-file input
+# cable-insights/questions/reference-graph-structure/code/reftel2graph.py expects.
+jq -n '[inputs | {(.document_number): .tags}] | add' results/all-tags.ndjson > results/all-tags.index.json
+jq -c --slurpfile idx results/all-tags.index.json '
+  $idx[0] as $tags
+  | {document_number, date, extracted_references, message_preview, tags: $tags[.document_number]}
+' results/all-mrns.ndjson > results/all-mrns-tags.ndjson
 ```
 
-Joining this output with TAGS, building a citation graph from it, and other
-downstream research analysis live in the sibling `cable-insights` repo, which
-consumes this NDJSON as its data source.
+Building a citation graph from `all-mrns-tags.ndjson` and other downstream
+research analysis live in the sibling `cable-insights` repo, which consumes
+this NDJSON as its data source.
