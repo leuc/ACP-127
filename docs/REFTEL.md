@@ -99,8 +99,20 @@ jq -c --slurpfile idx results/all-tags.index.json '
   $idx[0] as $tags
   | {document_number, date, extracted_references, message_preview, tags: $tags[.document_number]}
 ' results/all-mrns.ndjson > results/all-mrns-tags.ndjson
+
+# Estimate dates for MRNs that are cited but never appear as a document
+# (271,980 as of 2026-08-02), by interpolating same-station/year sequence
+# neighbors, refined where possible using cross-station cables sharing the
+# relay counter window between those neighbors -- see
+# src/missing_mrn_estimate.py's own docstring for the full algorithm. Needs
+# BOTH all-mrns.ndjson (references/dates) AND the raw per-year files
+# (_dash_counters.counter, only present in raw extractor output).
+python3 -m src.missing_mrn_estimate results/all-mrns.ndjson results/{1973..1979}.ndjson \
+  > results/missing-mrn-dates.ndjson \
+  2> results/coverage/missing-mrn-dates.$(date +%Y%m%d).txt
 ```
 
-Building a citation graph from `all-mrns-tags.ndjson` and other downstream
-research analysis live in the sibling `cable-insights` repo, which consumes
-this NDJSON as its data source.
+Building a citation graph from `all-mrns-tags.ndjson`, joining in estimated
+dates from `missing-mrn-dates.ndjson` for cited-but-missing MRNs, and other
+downstream research analysis live in the sibling `cable-insights` repo,
+which consumes this NDJSON as its data source.

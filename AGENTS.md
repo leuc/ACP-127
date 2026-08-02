@@ -355,10 +355,35 @@ The reference normalization pipeline converts raw ACP-127 reference strings into
    sibling consumer `tags_reference_similarity.py`, which reads
    `*.reftel.norm.ndjson`/`*.tags.norm.ndjson` separately and joins in memory.
 
-This repo's pipeline stops here, at `all-mrns-tags.ndjson`. Building the
-citation graph and analyzing it are now part of the sibling `cable-insights`
-repo, which consumes this repo's NDJSON output as its data source (not a code
-dependency).
+6. **Estimate dates for missing MRNs** -- 271,980 unique MRNs are cited
+   somewhere in `extracted_references` but never appear as a
+   `document_number` anywhere in the corpus (985,474 unique referenced MRNs
+   vs. 2,073,844 unique known document numbers). `src/missing_mrn_estimate.py`
+   estimates each one's date by interpolating between the nearest known
+   same-station/year documents by MRN sequence number, refined where
+   possible using cross-station cables that share the relay counter window
+   between those two anchors (see the module's own docstring for the full
+   algorithm and the correctness guard against counter-reset contamination):
+
+        python3 -m src.missing_mrn_estimate results/all-mrns.ndjson results/{1973..1979}.ndjson \
+          > results/missing-mrn-dates.ndjson \
+          2> results/coverage/missing-mrn-dates.$(date +%Y%m%d).txt
+
+   Needs BOTH `results/all-mrns.ndjson` (for `document_number`,
+   `extracted_references`, `date`) AND the raw per-year
+   `results/<year>.ndjson` files (for `_dash_counters.counter`, which only
+   exists in the raw extractor output) -- file role is auto-detected per
+   line. As of the 2026-08-02 run: 50.84% of missing MRNs resolve via the
+   refined cross-station tier, 27.23% via plain same-station interpolation,
+   2.03% extrapolate from a single known neighbor, and 19.90% are
+   unresolvable -- of which 49,170 (all of it) are airgram-format MRNs,
+   which are structurally unresolvable in this telegram-only corpus (see
+   the module docstring).
+
+This repo's pipeline stops here, at `all-mrns-tags.ndjson` and
+`missing-mrn-dates.ndjson`. Building the citation graph and analyzing it are
+now part of the sibling `cable-insights` repo, which consumes this repo's
+NDJSON output as its data source (not a code dependency).
 
 ## Normalizer performance
 
@@ -435,6 +460,7 @@ ambiguous.
 | `src/date_normalize.py` | — | Date normalizer: all date-bearing fields, `CoverageTracker`, same CLI style |
 | `src/reftel_normalize.py` | 567 | Main normalizer: rebulk functional pattern, `_parse_single_ref()`, `CoverageTracker`, CLI |
 | `src/tags_normalize.py` | 379 | TAGS normalizer/classifier, same CLI style |
+| `src/missing_mrn_estimate.py` | — | Estimates dates for cited-but-missing MRNs via same-station/year sequence interpolation, refined with cross-station relay-counter data; non-streaming (loads full corpus before any output) |
 | `src/station_data.py` | 1844 | 558 canonical stations + 686 variant mappings |
 | `*.reftel.ndjson` | input | Per-year NDJSON with `document_number`, `date`, `attr_reference`, `reference`, `message_preview` |
 

@@ -151,13 +151,21 @@ jq -c --slurpfile idx results/all-tags.index.json '
   $idx[0] as $tags
   | {document_number, date, extracted_references, message_preview, tags: $tags[.document_number]}
 ' results/all-mrns.ndjson > results/all-mrns-tags.ndjson
+
+# 6. Estimate dates for MRNs that are cited but never appear as a document,
+#    by interpolating same-station/year sequence-number neighbors, refined
+#    where possible using cross-station cables sharing the relay counter
+#    window between those neighbors (see src/missing_mrn_estimate.py docstring).
+python3 -m src.missing_mrn_estimate results/all-mrns.ndjson results/{1973..1979}.ndjson \
+  > results/missing-mrn-dates.ndjson \
+  2> results/coverage/missing-mrn-dates.$(date +%Y%m%d).txt
 ```
 
-This repo's pipeline stops at extraction + normalization (through the combined
-`all-mrns-tags.ndjson`). Graph-building and other corpus-level research
-analysis (citation graphs, statistical cross-checks, investigative writeups)
-live in the sibling `cable-insights` repo, which consumes the NDJSON produced
-above as its data source.
+This repo's pipeline stops at extraction + normalization (through
+`all-mrns-tags.ndjson` and `missing-mrn-dates.ndjson`). Graph-building and
+other corpus-level research analysis (citation graphs, statistical cross-checks,
+investigative writeups) live in the sibling `cable-insights` repo, which
+consumes the NDJSON produced above as its data source.
 
 ## Key Files
 
@@ -167,6 +175,7 @@ above as its data source.
 | `src/date_normalize.py` | Date normalizer: all date-bearing fields, with per-field coverage |
 | `src/reftel_normalize.py` | Reference normalizer: rebulk functional pattern, O(1) station dict |
 | `src/tags_normalize.py` | TAGS normalizer/classifier |
+| `src/missing_mrn_estimate.py` | Estimates dates for cited-but-missing MRNs via same-station/year sequence interpolation, refined with cross-station relay-counter data |
 | `src/station_data.py` | 558 canonical stations + 686 variant mappings |
 
 See `AGENTS.md` and `docs/REFTEL.md` for detailed architecture and failure analysis.
