@@ -1,6 +1,6 @@
 A Python rebulk parser for Allied Communications Publications (ACPs) 127 (G),
 "TAPE RELAY PROCEDURES" Telegrams from the Central Foreign Policy Files,
-1973-1779, Released Telegrams.
+1973-1979, Released Telegrams.
 Record Group 59: General Records of the Department of State, National Archives.
 
 # Data Source:
