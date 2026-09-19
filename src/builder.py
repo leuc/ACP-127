@@ -14,6 +14,7 @@ from .patterns.distribution import distribution
 from .patterns.from_line import from_line
 from .patterns.to_line import to_line
 from .patterns.info_line import info_line
+from .patterns.handling_restrictions import handling_restrictions
 from .patterns.drafting import drafting
 from .patterns.eo_line import eo_line
 from .patterns.tags_line import tags_line
@@ -48,6 +49,7 @@ def build_rebulk():
     rebulk.rebulk(from_line())
     rebulk.rebulk(to_line())
     rebulk.rebulk(info_line())
+    rebulk.rebulk(handling_restrictions())
     rebulk.rebulk(drafting())
     rebulk.rebulk(eo_line())
     rebulk.rebulk(tags_line())

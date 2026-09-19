@@ -34,6 +34,7 @@ _HEADER_NAMES = {
     "info",
     "drafted_by",
     "approved_by",
+    "handling_restriction_marker",
     "executive_order",
     "tags",
 }
@@ -44,6 +45,7 @@ _CLEANED_COORDS = {
     "info",
     "drafted_by",
     "approved_by",
+    "handling_restriction_marker",
     "executive_order",
     "tags",
 }
@@ -181,6 +183,8 @@ class RemoveHeaders(Rule):
         header_matches = []
         for name in _HEADER_NAMES:
             for m in matches.named(name):
+                if name == "handling_restriction_marker" and "header" not in m.tags:
+                    continue
                 if text_end <= m.start < attr_start:
                     header_matches.append(m)
 
