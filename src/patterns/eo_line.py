@@ -1,11 +1,11 @@
-"""Extract the E.O. 11652 line from message content.
+"""Extract the Executive Order line from message content.
 
 The Executive Order line appears in the message body header, after the
 classification/location line and before TAGS. It has many variant
 writings but limited values. The entire raw line is captured as-is.
 
 Output field:
-  _executive_order — the raw E.O. 11652 line
+  _executive_order — the raw Executive Order line
 """
 
 from rebulk import Rebulk, Rule
@@ -14,18 +14,22 @@ from rebulk.remodule import re
 
 from ..rules.message_content import BuildMessageContent
 
-_EO_RE = re.compile(r"^E\.?\s*O\.?\s*11652:\s*.+", re.MULTILINE | re.IGNORECASE)
+_EO_RE = re.compile(
+    r"^[ \t]*E\.?[ \t]*O\.?[ \t]*(?P<order>11652|11653|12065)"
+    r"[ \t]*:[ \t]*(?P<value>[^\r\n]+?)[ \t]*$",
+    re.MULTILINE | re.IGNORECASE,
+)
 
 
 def eo_line():
-    """Build pattern that matches the E.O. 11652 line."""
+    """Build the Executive Order line parser."""
     rebulk = Rebulk()
     rebulk.rules(ParseExecutiveOrder)
     return rebulk
 
 
 class ParseExecutiveOrder(Rule):
-    """Extract the E.O. 11652 line from message content."""
+    """Extract the Executive Order line from message content."""
 
     priority = 31
     dependency = BuildMessageContent
