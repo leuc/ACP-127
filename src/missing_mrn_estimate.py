@@ -144,7 +144,12 @@ def parse_canonical_mrn(mrn: str) -> tuple[str, str, bool, int] | None:
     m = _MRN_RE.match(mrn)
     if not m:
         return None
-    return m.group("year"), m.group("station"), m.group("airgram") is not None, int(m.group("seq"))
+    return (
+        m.group("year"),
+        m.group("station"),
+        m.group("airgram") is not None,
+        int(m.group("seq")),
+    )
 
 
 # ── Coverage Tracking ────────────────────────────────────────────────────
@@ -157,20 +162,30 @@ class CoverageTracker:
         self.total_missing = 0
         self.by_type: Counter[str] = Counter()
         self.by_type_airgram: Counter[tuple[str, bool]] = Counter()
-        self.accuracy_days: dict[str, list[int]] = {"interpolated": [], "interpolated_refined": []}
+        self.accuracy_days: dict[str, list[int]] = {
+            "interpolated": [],
+            "interpolated_refined": [],
+        }
         self.collisions_resolved = 0
         self.out_of_range_year = 0
         self.date_order_inverted: Counter[str] = Counter()
         self.unresolvable_examples: list[str] = []
 
-    def record_index(self, known_docnums: int, referenced_mrns: int, collisions_resolved: int):
+    def record_index(
+        self, known_docnums: int, referenced_mrns: int, collisions_resolved: int
+    ):
         self.known_docnums = known_docnums
         self.referenced_mrns = referenced_mrns
         self.collisions_resolved = collisions_resolved
 
     def record_estimate(
-        self, mrn: str, year: str, is_airgram: bool, estimate_type: str,
-        accuracy_days: int | None, date_order_inverted: bool,
+        self,
+        mrn: str,
+        year: str,
+        is_airgram: bool,
+        estimate_type: str,
+        accuracy_days: int | None,
+        date_order_inverted: bool,
     ):
         self.total_missing += 1
         self.by_type[estimate_type] += 1
@@ -181,7 +196,10 @@ class CoverageTracker:
             self.accuracy_days[estimate_type].append(accuracy_days)
         if date_order_inverted:
             self.date_order_inverted[estimate_type] += 1
-        if estimate_type == "unresolvable" and len(self.unresolvable_examples) < _MAX_UNRESOLVABLE_EXAMPLES:
+        if (
+            estimate_type == "unresolvable"
+            and len(self.unresolvable_examples) < _MAX_UNRESOLVABLE_EXAMPLES
+        ):
             self.unresolvable_examples.append(mrn)
 
     def print_report(self, source_files: list[str], output_path: str | None):
@@ -197,15 +215,27 @@ class CoverageTracker:
         w(f"Total missing MRNs:      {self.total_missing:,}\n\n")
 
         w("By estimate type:\n")
-        for t in ("interpolated_refined", "interpolated", "extrapolated", "unresolvable"):
+        for t in (
+            "interpolated_refined",
+            "interpolated",
+            "extrapolated",
+            "unresolvable",
+        ):
             n = self.by_type[t]
             w(f"  {t:22s} {n:>10,}  ({pct(n, self.total_missing):5.2f}%)\n")
 
-        w("\nBy type x airgram (airgram groups are structurally always empty -- see docstring):\n")
+        w(
+            "\nBy type x airgram (airgram groups are structurally always empty -- see docstring):\n"
+        )
         for is_airgram in (False, True):
             label = "airgram" if is_airgram else "cable"
             w(f"  {label}:\n")
-            for t in ("interpolated_refined", "interpolated", "extrapolated", "unresolvable"):
+            for t in (
+                "interpolated_refined",
+                "interpolated",
+                "extrapolated",
+                "unresolvable",
+            ):
                 n = self.by_type_airgram[(t, is_airgram)]
                 w(f"    {t:22s} {n:>10,}\n")
 
@@ -218,16 +248,24 @@ class CoverageTracker:
             def pctile(p):
                 return vals[min(n - 1, int(n * p))]
 
-            w(f"\naccuracy_days distribution ({t}, N={n:,}, all non-negative -- see date_order_inverted):\n")
+            w(
+                f"\naccuracy_days distribution ({t}, N={n:,}, all non-negative -- see date_order_inverted):\n"
+            )
             w(
                 f"  min={vals[0]}  p25={pctile(0.25)}  median={pctile(0.50)}  "
                 f"p75={pctile(0.75)}  p90={pctile(0.90)}  max={vals[-1]}\n"
             )
             inv = self.date_order_inverted[t]
-            w(f"  date_order_inverted (prev/next dates disagree on chronological order -- upstream date noise, treat as low-confidence): {inv:,}  ({pct(inv, n):.2f}%)\n")
+            w(
+                f"  date_order_inverted (prev/next dates disagree on chronological order -- upstream date noise, treat as low-confidence): {inv:,}  ({pct(inv, n):.2f}%)\n"
+            )
 
-        w(f"\nKnown-document sequence collisions collapsed (tie-break): {self.collisions_resolved:,}\n")
-        w(f"Missing MRNs with year prefix outside 73-79 (likely false-positive ref matches): {self.out_of_range_year:,}\n")
+        w(
+            f"\nKnown-document sequence collisions collapsed (tie-break): {self.collisions_resolved:,}\n"
+        )
+        w(
+            f"Missing MRNs with year prefix outside 73-79 (likely false-positive ref matches): {self.out_of_range_year:,}\n"
+        )
 
         if self.unresolvable_examples:
             w(f"\nFirst {len(self.unresolvable_examples)} unresolvable examples:\n")
@@ -253,12 +291,15 @@ def _iter_json_lines(path: str):
 # ── Index Building ───────────────────────────────────────────────────────
 
 
-def _finalize_group(entries: list[tuple[int, str, str, str]]) -> tuple[list[int], list[tuple[str, str, str]]]:
+def _finalize_group(
+    entries: list[tuple[int, str, str, str]],
+) -> tuple[list[int], list[tuple[str, str, str]], int]:
     """entries: list of (seq, document_number, document_number_raw, date).
 
     Sorts by (seq, date), then collapses duplicate seq values by taking the
     middle entry by position among ties (deterministic tie-break, see
-    module docstring). Returns parallel (seqs, reps) lists for bisect.
+    module docstring). Returns parallel (seqs, reps) lists for bisect, plus
+    the number of duplicate-seq groups collapsed.
     """
     entries.sort(key=lambda e: (e[0], e[3]))
     seqs: list[int] = []
@@ -289,17 +330,29 @@ def _lookup_neighbors(by_group, key, target_seq: int):
     nxt = None
     if i > 0:
         doc, raw, d = reps[i - 1]
-        prev = {"document_number": doc, "document_number_raw": raw, "sequence": seqs[i - 1], "date": d}
+        prev = {
+            "document_number": doc,
+            "document_number_raw": raw,
+            "sequence": seqs[i - 1],
+            "date": d,
+        }
     if i < len(seqs):
         doc, raw, d = reps[i]
-        nxt = {"document_number": doc, "document_number_raw": raw, "sequence": seqs[i], "date": d}
+        nxt = {
+            "document_number": doc,
+            "document_number_raw": raw,
+            "sequence": seqs[i],
+            "date": d,
+        }
     return prev, nxt
 
 
 # ── Estimation ─────────────────────────────────────────────────────────────
 
 
-def _refine_with_counter(prev, nxt, seq_frac, counter_by_raw, all_dated_docs, dates_sorted):
+def _refine_with_counter(
+    prev, nxt, seq_frac, counter_by_raw, all_dated_docs, dates_sorted
+):
     """Attempt the cross-station counter-window refinement. Returns
     (local_prev, local_next, target_counter_est) or None if unavailable/unsafe.
     local_prev/local_next are (date, counter, document_number) tuples.
@@ -314,8 +367,7 @@ def _refine_with_counter(prev, nxt, seq_frac, counter_by_raw, all_dated_docs, da
     lo = bisect.bisect_left(dates_sorted, prev["date"])
     hi = bisect.bisect_right(dates_sorted, nxt["date"])
     candidates = [
-        rec for rec in all_dated_docs[lo:hi]
-        if prev_counter <= rec[1] <= next_counter
+        rec for rec in all_dated_docs[lo:hi] if prev_counter <= rec[1] <= next_counter
     ]
     if not candidates:
         return None
@@ -337,7 +389,9 @@ def _estimate(prev, nxt, target_seq: int, counter_by_raw, all_dated_docs, dates_
         prev_d = date.fromisoformat(prev["date"])
         next_d = date.fromisoformat(nxt["date"])
 
-        refined = _refine_with_counter(prev, nxt, seq_frac, counter_by_raw, all_dated_docs, dates_sorted)
+        refined = _refine_with_counter(
+            prev, nxt, seq_frac, counter_by_raw, all_dated_docs, dates_sorted
+        )
         if refined:
             local_prev, local_next, target_counter_est = refined
             lp_date, lp_counter, _ = local_prev
@@ -345,15 +399,29 @@ def _estimate(prev, nxt, target_seq: int, counter_by_raw, all_dated_docs, dates_
             lp_d = date.fromisoformat(lp_date)
             ln_d = date.fromisoformat(ln_date)
             counter_span = ln_counter - lp_counter
-            local_frac = (target_counter_est - lp_counter) / counter_span if counter_span else 0.5
+            local_frac = (
+                (target_counter_est - lp_counter) / counter_span
+                if counter_span
+                else 0.5
+            )
             local_frac = min(1.0, max(0.0, local_frac))
             bracket_days = (ln_d - lp_d).days
             estimated = lp_d + timedelta(days=round(bracket_days * local_frac))
-            return estimated.isoformat(), "interpolated_refined", abs(bracket_days), bracket_days < 0
+            return (
+                estimated.isoformat(),
+                "interpolated_refined",
+                abs(bracket_days),
+                bracket_days < 0,
+            )
 
         bracket_days = (next_d - prev_d).days
         estimated = prev_d + timedelta(days=round(bracket_days * seq_frac))
-        return estimated.isoformat(), "interpolated", abs(bracket_days), bracket_days < 0
+        return (
+            estimated.isoformat(),
+            "interpolated",
+            abs(bracket_days),
+            bracket_days < 0,
+        )
 
     if prev or nxt:
         only = prev or nxt
@@ -367,19 +435,25 @@ def _estimate(prev, nxt, target_seq: int, counter_by_raw, all_dated_docs, dates_
 
 def main():
     if len(sys.argv) < 2:
-        sys.stderr.write("Usage: python3 -m src.missing_mrn_estimate <file.ndjson> [...] > output.ndjson\n")
+        sys.stderr.write(
+            "Usage: python3 -m src.missing_mrn_estimate <file.ndjson> [...] > output.ndjson\n"
+        )
         sys.exit(1)
 
     paths = sys.argv[1:]
     if sys.stdout.isatty():
-        sys.stderr.write("ERROR: redirect stdout to a file (e.g. ... > output.ndjson)\n")
+        sys.stderr.write(
+            "ERROR: redirect stdout to a file (e.g. ... > output.ndjson)\n"
+        )
         sys.exit(1)
 
     out = sys.stdout
 
     known_docnums: set[str] = set()
     referenced_mrns: set[str] = set()
-    raw_index: dict[tuple[str, str, bool], list[tuple[int, str, str, str]]] = defaultdict(list)
+    raw_index: dict[tuple[str, str, bool], list[tuple[int, str, str, str]]] = (
+        defaultdict(list)
+    )
     date_by_raw: dict[str, str] = {}
     canonical_by_raw: dict[str, str] = {}
     counter_by_raw: dict[str, int] = {}
@@ -415,10 +489,14 @@ def main():
                 parsed = parse_canonical_mrn(doc)
                 if parsed:
                     year, station, is_airgram, seq = parsed
-                    raw_index[(station, year, is_airgram)].append((seq, doc, doc_raw, date_str))
+                    raw_index[(station, year, is_airgram)].append(
+                        (seq, doc, doc_raw, date_str)
+                    )
 
     sys.stderr.write("Finalizing station/year sequence index ...\n")
-    by_group: dict[tuple[str, str, bool], tuple[list[int], list[tuple[str, str, str]]]] = {}
+    by_group: dict[
+        tuple[str, str, bool], tuple[list[int], list[tuple[str, str, str]]]
+    ] = {}
     total_collisions = 0
     for key, entries in raw_index.items():
         seqs, reps, collisions = _finalize_group(entries)
@@ -454,9 +532,17 @@ def main():
             # than raising, since a malformed reference should degrade
             # gracefully, not crash a multi-hour-adjacent pipeline run.
             result = {
-                "mrn": mrn, "station": None, "year": None, "is_airgram": None,
-                "sequence": None, "estimated_date": None, "estimate_type": "unparseable",
-                "accuracy_days": None, "date_order_inverted": False, "prev_known": None, "next_known": None,
+                "mrn": mrn,
+                "station": None,
+                "year": None,
+                "is_airgram": None,
+                "sequence": None,
+                "estimated_date": None,
+                "estimate_type": "unparseable",
+                "accuracy_days": None,
+                "date_order_inverted": False,
+                "prev_known": None,
+                "next_known": None,
             }
             out.write(json.dumps(result, ensure_ascii=False) + "\n")
             continue
@@ -466,7 +552,9 @@ def main():
         estimated_date, estimate_type, accuracy_days, date_order_inverted = _estimate(
             prev, nxt, seq, counter_by_raw, all_dated_docs, dates_sorted
         )
-        coverage.record_estimate(mrn, year, is_airgram, estimate_type, accuracy_days, date_order_inverted)
+        coverage.record_estimate(
+            mrn, year, is_airgram, estimate_type, accuracy_days, date_order_inverted
+        )
 
         result = {
             "mrn": mrn,
@@ -479,12 +567,22 @@ def main():
             "accuracy_days": accuracy_days,
             "date_order_inverted": date_order_inverted,
             "prev_known": (
-                {"document_number": prev["document_number"], "sequence": prev["sequence"], "date": prev["date"]}
-                if prev else None
+                {
+                    "document_number": prev["document_number"],
+                    "sequence": prev["sequence"],
+                    "date": prev["date"],
+                }
+                if prev
+                else None
             ),
             "next_known": (
-                {"document_number": nxt["document_number"], "sequence": nxt["sequence"], "date": nxt["date"]}
-                if nxt else None
+                {
+                    "document_number": nxt["document_number"],
+                    "sequence": nxt["sequence"],
+                    "date": nxt["date"],
+                }
+                if nxt
+                else None
             ),
         }
         out.write(json.dumps(result, ensure_ascii=False) + "\n")

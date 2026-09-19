@@ -313,7 +313,7 @@ The reference normalization pipeline converts raw ACP-127 reference strings into
 2. **Flatten to reftel NDJSON** (extracts only relevant fields for faster loading):
 
         for year in {1973..1979}; do
-          jq -Mc '{"references": ._reference, "attr_reference": ."Message Attributes"."Reference", "document_number": ."Message Attributes"."Document Number", "draft_date": ."Message Attributes"."Draft Date", "sent_date": ."Message Attributes"."Sent Date", "dtg": ._dtg, "message_preview": (._message_content | if . then split("\n")[:100] | join("\n") else null end)}' results/${year}.ndjson > results/${year}.reftel.ndjson
+          jq -Mc -f scripts/flatten_reftel.jq results/${year}.ndjson > results/${year}.reftel.ndjson
         done
 
    This produces per-year NDJSON files (e.g. `1973.reftel.ndjson`) with `document_number`, `draft_date`, `sent_date`, `dtg`, `attr_reference`, `references`, and `message_preview` (first 100 lines of the cleaned body text) fields. Note: `draft_date`/`sent_date` here are still **raw** attribute strings and `dtg` is still raw components — no `//` fallback and no parsing happens in jq; see the "Date normalization" section above for where `src/reftel_normalize.py` resolves these into a single date.
@@ -342,11 +342,8 @@ The reference normalization pipeline converts raw ACP-127 reference strings into
    index once, then stream-join the mrns file against it, rather than
    rescanning the tags file per record):
 
-        jq -n '[inputs | {(.document_number): .tags}] | add' results/all-tags.ndjson > results/all-tags.index.json
-        jq -c --slurpfile idx results/all-tags.index.json '
-          $idx[0] as $tags
-          | {document_number, date, extracted_references, message_preview, tags: $tags[.document_number]}
-        ' results/all-mrns.ndjson > results/all-mrns-tags.ndjson
+        jq -n -f scripts/build_tags_index.jq results/all-tags.ndjson > results/all-tags.index.json
+        jq -c --slurpfile idx results/all-tags.index.json -f scripts/join_refs_tags.jq results/all-mrns.ndjson > results/all-mrns-tags.ndjson
 
    This is the exact single-file shape
    `cable-insights/questions/reference-graph-structure/code/reftel2graph.py`
@@ -379,6 +376,27 @@ The reference normalization pipeline converts raw ACP-127 reference strings into
    unresolvable -- of which 49,170 (all of it) are airgram-format MRNs,
    which are structurally unresolvable in this telegram-only corpus (see
    the module docstring).
+
+   **Optionally merge the estimates into a single file.** The
+   `missing-mrn-dates.ndjson` above is complete on its own; to also get one
+   file with a `date` for as many nodes as possible, stream-join it onto
+   `all-mrns-tags.ndjson` with a single jq pass:
+
+        jq -n -c --slurpfile est results/missing-mrn-dates.ndjson \
+          -f scripts/merge_missing_mrn_dates.jq \
+          results/all-mrns-tags.ndjson > results/all-mrns-tags.estimated.ndjson
+
+   The `--slurpfile` estimate index is built once; real rows are streamed and
+   enriched where a `document_number` matches an estimated MRN, and each
+   resolved estimate additionally yields one citation-only row
+   (`document_number` = the MRN, `date` = `estimated_date`, with
+   `estimate_type`/`accuracy_days`/`date_order_inverted` carried through).
+   Unresolvable estimates (`estimated_date: null`) are dropped.
+   `cable-insights/questions/reference-graph-structure/code/reftel2graph.py`
+   consumes either file directly (single argument): it detects rows carrying
+   `estimate_type` as citation-only estimate nodes and tags them `missing`
+   with `date_estimated`, so both `all-mrns-tags.ndjson` (no estimates) and
+   `all-mrns-tags.estimated.ndjson` (estimates merged inline) work unchanged.
 
 This repo's pipeline stops here, at `all-mrns-tags.ndjson` and
 `missing-mrn-dates.ndjson`. Building the citation graph and analyzing it are

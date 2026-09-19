@@ -120,13 +120,7 @@ python3 -m src.extractor <paths...>
 #    draft_date/sent_date/dtg all stay raw here -- see step 3a. reftel_normalize.py
 #    reads these three fields independently and resolves its own single date (step 3b).
 for year in {1973..1979}; do
-  jq -Mc '{"references": ._reference, "attr_reference": ."Message Attributes"."Reference",
-           "document_number": ."Message Attributes"."Document Number",
-           "draft_date": ."Message Attributes"."Draft Date",
-           "sent_date": ."Message Attributes"."Sent Date",
-           "dtg": ._dtg,
-           "message_preview": (._message_content | if . then split("\n")[:100] | join("\n") else null end)}' \
-    results/${year}.ndjson > results/${year}.reftel.ndjson
+  jq -Mc -f scripts/flatten_reftel.jq results/${year}.ndjson > results/${year}.reftel.ndjson
 done
 
 # 3a. Normalize every date-bearing field (body DTG + all Message Attribute
@@ -146,11 +140,8 @@ python3 -m src.tags_normalize results/{1973..1979}.ndjson > results/all-tags.ndj
 #    This is what `cable-insights/questions/reference-graph-structure/code/reftel2graph.py`
 #    expects as its single input -- jq only, two passes so the tags file is
 #    indexed once rather than re-scanned per mrns record:
-jq -n '[inputs | {(.document_number): .tags}] | add' results/all-tags.ndjson > results/all-tags.index.json
-jq -c --slurpfile idx results/all-tags.index.json '
-  $idx[0] as $tags
-  | {document_number, date, extracted_references, message_preview, tags: $tags[.document_number]}
-' results/all-mrns.ndjson > results/all-mrns-tags.ndjson
+jq -n -f scripts/build_tags_index.jq results/all-tags.ndjson > results/all-tags.index.json
+jq -c --slurpfile idx results/all-tags.index.json -f scripts/join_refs_tags.jq results/all-mrns.ndjson > results/all-mrns-tags.ndjson
 
 # 6. Estimate dates for MRNs that are cited but never appear as a document,
 #    by interpolating same-station/year sequence-number neighbors, refined
@@ -173,25 +164,28 @@ Not part of the required pipeline -- `all-mrns-tags.ndjson` and
 `missing-mrn-dates.ndjson` are already complete, independently useful
 artifacts on their own. This step only helps a consumer that wants one file
 with a `date` for as many nodes as possible, including MRNs that only exist
-as citations. Resolved missing-MRN estimates are appended as extra records
+as citations. The estimate index is json-joined (via `--slurpfile`) against
+the real rows: real rows whose `document_number` matches an estimated MRN get
+`estimated_date` plus `estimate_type`/`accuracy_days`/`date_order_inverted`
+attached, and every resolved estimate also yields one citation-only record
 (`document_number` = the MRN, `date` = `estimated_date`,
-`extracted_references`/`message_preview`/`tags` all `null` since the
-document itself doesn't exist -- only its estimated date is known -- plus
+`extracted_references`/`message_preview`/`tags` all `null` since the document
+itself doesn't exist -- only its estimated date is known -- plus
 `estimate_type`/`accuracy_days`/`date_order_inverted` carried through so a
 consumer can tell an estimated row from a real one and judge its
-confidence):
+confidence). Unresolvable estimates (`estimated_date: null`) are dropped:
 
 ```bash
-jq -c 'select(.estimated_date != null) | {document_number: .mrn, date: .estimated_date, extracted_references: null, message_preview: null, tags: null, estimate_type, accuracy_days, date_order_inverted}' \
-  results/missing-mrn-dates.ndjson \
-  | cat results/all-mrns-tags.ndjson - > results/all-mrns-tags.estimated.ndjson
+jq -n -c --slurpfile est results/missing-mrn-dates.ndjson \
+  -f scripts/merge_missing_mrn_dates.jq \
+  results/all-mrns-tags.ndjson > results/all-mrns-tags.estimated.ndjson
 ```
 
-**Caveat**: `reftel2graph.py`'s current loop skips any record whose
-`extracted_references` is falsy, so these merged rows won't populate node
-dates there without a corresponding change on that side -- this step
-produces the data, it doesn't change how existing downstream code consumes
-it.
+**Consumption**: `cable-insights/questions/reference-graph-structure/code/reftel2graph.py`
+takes either file as its single input argument -- it detects rows carrying
+`estimate_type` as citation-only estimate nodes and tags them `missing` with
+`date_estimated`, so both `all-mrns-tags.ndjson` (no estimates) and
+`all-mrns-tags.estimated.ndjson` (estimates merged inline) work unchanged.
 
 ## Key Files
 
