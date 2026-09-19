@@ -4,7 +4,8 @@ These are EO Systematic Review markings added by the declassification process,
 not part of the original ACP-127 telegram text.
 """
 
-from rebulk import Rebulk, Rule, RemoveMatch
+from rebulk import Rebulk, Rule
+from rebulk.rules import Consequence
 
 from ..rules.validate import ValidateSingleMessageAttributes
 
@@ -16,6 +17,18 @@ _MARKING_STRINGS = [
     "Margaret P. Grafeld Declassified/Released US Department of State EO Systematic Review 06 JUL 2006",
     "Margaret P. Grafeld Declassified/Released US Department of State EO Systematic Review 05 JUL 2006",
 ]
+
+
+class RemoveMatchesWithCoverage(Consequence):
+    """Remove known boilerplate while retaining its coverage spans."""
+
+    def then(self, matches, when_response, context):
+        removed = list(when_response)
+        ranges = context.setdefault("_coverage_ranges", [])
+        ranges.extend((match.start, match.end) for match in removed)
+        for match in removed:
+            if match in matches:
+                matches.remove(match)
 
 
 def declass_markings():
@@ -40,7 +53,7 @@ class CollectMarkings(Rule):
 
     priority = 200
     dependency = ValidateSingleMessageAttributes
-    consequence = RemoveMatch
+    consequence = RemoveMatchesWithCoverage()
 
     def when(self, matches, context):
         text_ms = matches.markers.named("message_text_marker")

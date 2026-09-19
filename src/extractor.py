@@ -12,7 +12,7 @@ import multiprocessing
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from .builder import build_rebulk
-from .coverage import CoverageTracker
+from .coverage import CoverageTracker, calculate_coverage
 from .serializer import result_to_dict, is_na_value
 
 _REBULK_INSTANCE = None
@@ -40,15 +40,12 @@ def process_file(filepath):
         with open(filepath, "r", encoding="utf-8", errors="replace") as f:
             text = f.read()
 
-        matches = _WORKER_REBULK.matches(text)
+        context = {}
+        matches = _WORKER_REBULK.matches(text, context=context)
 
-        matched_positions = bytearray(len(text))
-        for match in matches:
-            if not match.private and not match.marker:
-                for pos in range(match.start, match.end):
-                    matched_positions[pos] = 1
-
-        matched_bytes = sum(matched_positions)
+        byte_stats = calculate_coverage(
+            text, matches, context.get("_coverage_ranges", ())
+        )
         matched_doc = 1 if matches else 0
 
         field_counts = {}
@@ -64,8 +61,11 @@ def process_file(filepath):
         coverage = {
             "total_documents": 1,
             "matched_documents": matched_doc,
-            "total_bytes": len(text),
-            "matched_bytes": matched_bytes,
+            **byte_stats,
+            "fully_covered_documents": int(
+                byte_stats["unmatched_non_whitespace_bytes"] == 0
+            ),
+            "file": filepath,
             "field_counts": field_counts,
         }
 
@@ -164,6 +164,27 @@ def main():
                 tracker.matched_documents += coverage["matched_documents"]
                 tracker.total_bytes += coverage["total_bytes"]
                 tracker.matched_bytes += coverage["matched_bytes"]
+                tracker.ignored_whitespace_bytes += coverage[
+                    "ignored_whitespace_bytes"
+                ]
+                tracker.unmatched_non_whitespace_bytes += coverage[
+                    "unmatched_non_whitespace_bytes"
+                ]
+                tracker.fully_covered_documents += coverage[
+                    "fully_covered_documents"
+                ]
+                if coverage["unmatched_non_whitespace_bytes"]:
+                    total = coverage["total_bytes"]
+                    coverage_pct = (
+                        coverage["matched_bytes"] / total * 100 if total else 0.0
+                    )
+                    tracker.incomplete_documents.append(
+                        (
+                            coverage_pct,
+                            coverage["unmatched_non_whitespace_bytes"],
+                            coverage["file"],
+                        )
+                    )
                 for name, count in coverage["field_counts"].items():
                     tracker.field_counts[name] += count
 
@@ -181,6 +202,15 @@ def main():
                 sys.stderr.write(f"{key}: {value:.2f}\n")
             else:
                 sys.stderr.write(f"{key}: {value}\n")
+
+    if tracker.incomplete_documents:
+        sys.stderr.write("documents_below_100_pct:\n")
+        for coverage_pct, unmatched, filepath in sorted(
+            tracker.incomplete_documents, key=lambda entry: (entry[0], entry[2])
+        ):
+            sys.stderr.write(
+                f"    {coverage_pct:.2f}% ({unmatched} unmatched bytes) {filepath}\n"
+            )
 
 
 if __name__ == "__main__":

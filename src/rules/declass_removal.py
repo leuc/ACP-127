@@ -4,8 +4,9 @@ These are EO Systematic Review markings added by the declassification process,
 not part of the original ACP-127 telegram text. Removed without JSON output.
 """
 
-from rebulk import Rule, RemoveMatch
+from rebulk import Rule
 
+from ..patterns.declass_markings import RemoveMatchesWithCoverage
 from ..rules.validate import ValidateSingleMessageAttributes
 
 
@@ -18,7 +19,7 @@ class RemoveDeclassMarkings(Rule):
 
     priority = 200
     dependency = ValidateSingleMessageAttributes
-    consequence = RemoveMatch
+    consequence = RemoveMatchesWithCoverage()
 
     def when(self, matches, context):
         text_ms = matches.markers.named("message_text_marker")
