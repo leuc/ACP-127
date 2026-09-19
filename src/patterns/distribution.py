@@ -4,7 +4,8 @@ Appears at the start of message content, before the dash counter line.
 Parsed after page-break removal via dependency on BuildMessageContent.
 
 Output fields:
-  _distribution — {raw, ACTION: {CODE: count, ...}, INFO: {CODE: count, ...}}
+  _distribution — {raw, unknown_num, ACTION: {CODE: count, ...},
+                   INFO: {CODE: count, ...}}
 """
 
 from rebulk import Rebulk, Rule
@@ -16,6 +17,10 @@ from ..rules.message_content import BuildMessageContent
 _CODE_RE = re.compile(r"(?P<code>\w+)-(?P<count>\d+)")
 _SUM_RE = re.compile(r"/\s*(?P<expected>\d+)(?:\s+[RW])?\s*$", re.MULTILINE)
 _DASH_BOUNDARY_RE = re.compile(r"^\s{4,}\-{10,}", re.MULTILINE)
+_UNKNOWN_NUM_RE = re.compile(
+    r"^[ \t]*(?P<unknown_num>\d+)[ \t]*\r?\n(?:[ \t]*\r?\n)*\Z",
+    re.MULTILINE,
+)
 
 
 def _validate_sum(parsed, text):
@@ -109,6 +114,17 @@ class ParseDistribution(Rule):
         else:
             return False
 
+        # Some distributions have an unlabeled numeric line immediately before
+        # ACTION. Include it only when no other substantive text separates the
+        # complete numeric line from the selected distribution header. ORIGIN is
+        # deliberately excluded because document numbers can directly precede it.
+        unknown_num = None
+        if act and act.start() == dist_start:
+            unknown_num_m = _UNKNOWN_NUM_RE.search(mc_text[:dist_start])
+            if unknown_num_m:
+                unknown_num = int(unknown_num_m.group("unknown_num"))
+                dist_start = unknown_num_m.start()
+
         # Find /N sum line to determine distribution end. Some documents
         # replace the numeric "/NNN" copy count with a non-numeric token
         # (e.g. "( ISO )") — when no sum marker is found, fall back to the
@@ -134,11 +150,15 @@ class ParseDistribution(Rule):
         parsed = _parse_distribution(dist_text)
         if not parsed:
             return False
+        distribution_value = {"raw": dist_text}
+        if unknown_num is not None:
+            distribution_value["unknown_num"] = unknown_num
+        distribution_value.update(parsed)
 
         dist_match = Match(
             mc_start + dist_start,
             mc_start + dist_end,
-            value={"raw": dist_text, **parsed},
+            value=distribution_value,
             name="distribution",
             tags=["message_content"],
         )
