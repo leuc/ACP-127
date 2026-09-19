@@ -221,6 +221,57 @@ class MergeContinuationLines(Rule):
     dependency = RemoveAttributesBeforeMarker
     consequence = [RemoveMatch, AppendMatch]
 
+    @staticmethod
+    def _line_is_covered_noise(line, line_start, coverage_ranges):
+        """Return whether every non-whitespace character is already covered."""
+        substantive = [
+            line_start + offset
+            for offset, character in enumerate(line)
+            if not character.isspace()
+        ]
+        if not substantive:
+            return False
+        return all(
+            any(start <= position < end for start, end in coverage_ranges)
+            for position in substantive
+        )
+
+    @classmethod
+    def _extend_to_value(cls, text, attr, next_attr, coverage_ranges):
+        """Extend a To value across blank lines and recognized page noise."""
+        gap_text = text[attr.end : next_attr.start]
+        continuations = []
+        last_end = attr.end
+        line_start = attr.end
+
+        for line_with_end in gap_text.splitlines(keepends=True):
+            line = line_with_end.rstrip("\r\n")
+            line_end = line_start + len(line)
+            stripped = line.strip()
+
+            if stripped and not cls._line_is_covered_noise(
+                line, line_start, coverage_ranges
+            ):
+                first_word = stripped.split()[0]
+                if first_word in _KEY_SET:
+                    break
+                continuations.append(stripped)
+                last_end = line_end
+
+            line_start += len(line_with_end)
+
+        if not continuations:
+            return None
+
+        value = attr.value.rstrip() + "\n" + "\n".join(continuations)
+        return Match(
+            attr.start,
+            last_end,
+            value=value,
+            name=attr.name,
+            tags=attr.tags,
+        )
+
     def when(self, matches, context):
         text = matches.input_string
         attrs = sorted(
@@ -240,8 +291,18 @@ class MergeContinuationLines(Rule):
 
         to_remove = []
         to_append = []
+        coverage_ranges = context.get("_coverage_ranges", ())
 
         for i, attr in enumerate(attrs[:-1]):
+            if attr.name == "To":
+                extended = self._extend_to_value(
+                    text, attr, attrs[i + 1], coverage_ranges
+                )
+                if extended is not None:
+                    to_remove.append(attr)
+                    to_append.append(extended)
+                continue
+
             gap_text = text[attr.end : attrs[i + 1].start]
             if not gap_text.strip():
                 continue
