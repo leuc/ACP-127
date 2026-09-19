@@ -2,6 +2,7 @@
 
 from rebulk import Rebulk
 
+from .patterns.reproduction_artifacts import reproduction_artifacts
 from .patterns.message_sections import message_sections
 from .patterns.locator import locator
 from .patterns.attributes import attributes
@@ -37,6 +38,7 @@ def build_rebulk():
     """Build and return the main Rebulk object with all patterns and rules."""
     rebulk = Rebulk()
 
+    rebulk.rebulk(reproduction_artifacts())
     rebulk.rebulk(message_sections())
     rebulk.rebulk(locator())
     rebulk.rebulk(attributes())
