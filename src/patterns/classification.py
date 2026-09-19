@@ -19,6 +19,7 @@ from rebulk.remodule import re
 
 _CLASSIFICATIONS = [
     "UNCLASSIFIED",
+    "UNCLAS",
     "LIMITED OFFICIAL USE",
     "CONFIDENTIAL",
     "SECRET",
@@ -59,5 +60,4 @@ def classification():
         flags=re.MULTILINE | re.IGNORECASE,
         formatter=_classification_value,
     )
-
     return rebulk
