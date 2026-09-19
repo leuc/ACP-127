@@ -13,19 +13,19 @@ def message_sections():
     rebulk = Rebulk()
 
     rebulk.regex(
-        r"\s+Message Text\b",
+        r"^[ \t]*Message Text[ \t]*$",
         name="message_text_marker",
         marker=True,
         tags=["section", "root"],
-        flags=re.IGNORECASE,
+        flags=re.MULTILINE,
     )
 
     rebulk.regex(
-        r"\s+Message Attributes\b",
+        r"^[ \t]*Message Attributes[ \t]*$",
         name="message_attributes_marker",
         marker=True,
         tags=["section", "root"],
-        flags=re.IGNORECASE,
+        flags=re.MULTILINE,
     )
 
     return rebulk
