@@ -16,9 +16,11 @@ from rebulk.remodule import re
 from ..rules.message_content import BuildMessageContent
 from .eo_line import ParseExecutiveOrder
 from .ref_line import ParseRef
+from .tags_line import FindTagsCandidates
 
 _SUBJECT_RE = re.compile(
-    r"^[ \t]*(?P<label>SUBJECT|SUBJT|SUBJ4|SUBJ|SUB|SUJ)"
+    r"(?P<prefix>^[ \t]*|[ \t]+|(?<=:)|(?<=TAGS))"
+    r"(?P<label>SUBJECT|SUBJT|SUBJ4|SUBJ|SUB|SUJ)"
     r"(?P<separator>[ \t]*[:;/.,][ \t]*|[ \t]+)"
     r"(?P<value>\S.*?)$",
     re.MULTILINE | re.IGNORECASE,
@@ -70,7 +72,14 @@ class FindSubjectCandidates(Rule):
             separator = found.group("separator")
             tags = ["subject_candidate", "message_content"]
             raw = found.group(0)
-            if ":" in separator and raw == raw.lstrip(" \t"):
+            label_start = found.start("label")
+            line_start = mc_text.rfind("\n", 0, label_start) + 1
+            inline = bool(mc_text[line_start:label_start].strip())
+            if inline:
+                tags.append("inline_subject")
+                if any(mark in separator for mark in ":;/.,"):
+                    tags.append("punctuated_subject")
+            elif ":" in separator and raw == raw.lstrip(" \t"):
                 tags.append("legacy_subject")
             candidates.append(
                 Match(
@@ -93,7 +102,12 @@ class TagHeaderSubject(Rule):
     """Tag the first positionally valid SUBJECT candidate as a header."""
 
     priority = 31
-    dependency = (FindSubjectCandidates, ParseExecutiveOrder, ParseRef)
+    dependency = (
+        FindSubjectCandidates,
+        FindTagsCandidates,
+        ParseExecutiveOrder,
+        ParseRef,
+    )
     consequence = AppendTags(["header"])
 
     def when(self, matches, context):
@@ -119,8 +133,30 @@ class TagHeaderSubject(Rule):
         if not anchors:
             return False
 
+        routing_matches = [
+            match for match in anchors if match.name in {"to", "info"}
+        ]
+        tags_candidates = matches.tagged("tags_candidate")
+
         references = sorted(matches.named("reference"), key=lambda match: match.start)
         for candidate in candidates:
+            if "inline_subject" in candidate.tags:
+                inside_routing = any(
+                    routing.start <= candidate.start < routing.end
+                    for routing in routing_matches
+                )
+                inside_tags = any(
+                    tags.start <= candidate.start < tags.end
+                    for tags in tags_candidates
+                )
+                if (
+                    inside_routing
+                    and inside_tags
+                    and "punctuated_subject" in candidate.tags
+                ):
+                    return candidate
+                continue
+
             preceding = [anchor for anchor in anchors if anchor.end <= candidate.start]
             if not preceding:
                 continue
