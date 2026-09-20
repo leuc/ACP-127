@@ -5,6 +5,66 @@ from collections import Counter
 from .serializer import is_na_value
 
 
+# Message Attributes supplied by NARA that have a direct counterpart extracted
+# independently from the telegram body.  Keep this list deliberately narrow:
+# related-but-different fields (for example Sent Date/DTG) are not valid
+# extraction-completeness checks.
+ATTRIBUTE_BODY_FIELDS = (
+    ("Current Classification", "_classification_marker"),
+    ("Drafter", "_drafted_by"),
+    ("Executive Order", "_executive_order"),
+    ("From", "_from"),
+    ("Handling Restrictions", "_handling_restrictions"),
+    ("Reference", "_reference"),
+    ("Subject", "_subject"),
+    ("TAGS", "_tags"),
+    ("To", "_to"),
+)
+
+
+def _has_value(value):
+    """Return whether a serialized field contains a substantive value."""
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return value.strip().lower() not in {"", "n/a", "na"}
+    return bool(value)
+
+
+def has_retrievable_body(document):
+    """Return whether a serialized document contains retrievable body text."""
+    attributes = document.get("Message Attributes") or {}
+    locator = attributes.get("Locator")
+    return (
+        isinstance(locator, str)
+        and "TEXT ON-LINE" in locator.upper()
+        and _has_value(document.get("_message_content"))
+    )
+
+
+def missing_body_extractions(document):
+    """Return provided attributes whose direct body extraction is absent.
+
+    Only documents whose Locator says ``TEXT ON-LINE`` and whose cleaned body
+    is non-empty are eligible.  This excludes records containing an
+    unretrievable-text error in place of a telegram body.
+    """
+    attributes = document.get("Message Attributes") or {}
+    if not has_retrievable_body(document):
+        return []
+
+    return [
+        {
+            "attribute": attribute_name,
+            "body_field": body_field,
+            "provided_value": attributes[attribute_name],
+        }
+        for attribute_name, body_field in ATTRIBUTE_BODY_FIELDS
+        if _has_value(attributes.get(attribute_name))
+        and not _has_value(document.get(body_field))
+    ]
+
+
 def calculate_coverage(input_text, matches, extra_ranges=()):
     """Return effective coverage statistics for one input document.
 
