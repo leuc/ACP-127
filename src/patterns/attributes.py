@@ -85,6 +85,7 @@ _KEYS = [
 ]
 
 _KEY_SET = set(_KEYS)
+_BLANK_TOLERANT_ATTRIBUTES = {"Review Markings", "To"}
 
 
 def _is_valid_key_start(text, pos):
@@ -237,8 +238,8 @@ class MergeContinuationLines(Rule):
         )
 
     @classmethod
-    def _extend_to_value(cls, text, attr, next_attr, coverage_ranges):
-        """Extend a To value across blank lines and recognized page noise."""
+    def _extend_across_blank_lines(cls, text, attr, next_attr, coverage_ranges):
+        """Extend selected values across blanks and recognized page noise."""
         gap_text = text[attr.end : next_attr.start]
         continuations = []
         last_end = attr.end
@@ -252,9 +253,6 @@ class MergeContinuationLines(Rule):
             if stripped and not cls._line_is_covered_noise(
                 line, line_start, coverage_ranges
             ):
-                first_word = stripped.split()[0]
-                if first_word in _KEY_SET:
-                    break
                 continuations.append(stripped)
                 last_end = line_end
 
@@ -294,8 +292,8 @@ class MergeContinuationLines(Rule):
         coverage_ranges = context.get("_coverage_ranges", ())
 
         for i, attr in enumerate(attrs[:-1]):
-            if attr.name == "To":
-                extended = self._extend_to_value(
+            if attr.name in _BLANK_TOLERANT_ATTRIBUTES:
+                extended = self._extend_across_blank_lines(
                     text, attr, attrs[i + 1], coverage_ranges
                 )
                 if extended is not None:
@@ -316,10 +314,6 @@ class MergeContinuationLines(Rule):
                     break
                 if not line.strip():
                     continue
-                stripped = line.lstrip()
-                space_or_word = stripped.split()[0] if stripped.split() else ""
-                if space_or_word in _KEY_SET:
-                    break
                 content_seen = True
                 last_idx = j
 
