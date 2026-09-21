@@ -14,6 +14,8 @@ from rebulk.match import Match
 from rebulk.remodule import re
 
 from ..rules.message_content import BuildMessageContent
+from .dash_counter import CollectDashCounters
+from .from_line import ValidateFrom
 
 
 def drafting():
@@ -23,7 +25,20 @@ def drafting():
     return rebulk
 
 
-_DASH_RE = re.compile(r"^\s{4,}\-{10,}", re.MULTILINE)
+_DRAFTED_HEADER = (
+    r"DRAFTED(?:Y[ \t]+BY|[ \t]*BY|[ \t]+[A-Z0-9]{1,2})?"
+)
+_CANONICAL_DRAFTED_HEADER = r"DRAFTED[ \t]+BY"
+_APPROVED_HEADER = r"(?:APPROVED(?:[ \t]*BY)?|EPPROVED[ \t]+BY)"
+_END_PAT = re.compile(
+    r"^(?:"
+    + _DRAFTED_HEADER
+    + r"|"
+    + _APPROVED_HEADER
+    + r"|DESIRED DIST(?:RIBUTION|B)|DISTRIBUTION)\b",
+    re.MULTILINE | re.IGNORECASE,
+)
+_MAX_FOOTER_DISTANCE = 512
 
 
 class ParseDrafting(Rule):
@@ -35,17 +50,24 @@ class ParseDrafting(Rule):
     """
 
     priority = 31
-    dependency = BuildMessageContent
+    dependency = (BuildMessageContent, CollectDashCounters, ValidateFrom)
 
     @staticmethod
-    def _find_metadata_region(mc_text):
-        """Return (region_text, base_offset) bounded by dash counter or FM."""
-        dc_m = _DASH_RE.search(mc_text)
-        if dc_m:
-            end = dc_m.start()
-        else:
-            fm_m = re.search(r"^FM\s+", mc_text, re.MULTILINE)
-            end = fm_m.start() if fm_m else len(mc_text)
+    def _find_metadata_region(mc_text, matches):
+        """Return the region before existing dash-counter/from matches."""
+        boundaries = []
+        for name in ("dash_counters", "from"):
+            for match in matches.named(name):
+                if name == "dash_counters" and isinstance(match.value, dict):
+                    raw = match.value.get("raw")
+                else:
+                    raw = match.raw
+                if not raw:
+                    continue
+                position = mc_text.find(raw)
+                if position >= 0:
+                    boundaries.append(position)
+        end = min(boundaries) if boundaries else len(mc_text)
         return mc_text[:end], 0
 
     @staticmethod
@@ -56,13 +78,12 @@ class ParseDrafting(Rule):
         Lines after the header that don't start with another header
         keyword are treated as continuations.
         """
-        _END_PAT = re.compile(
-            r"^(?:DRAFTED BY|APPROVED BY|DESIRED DISTRIBUTION|\s{4,}\-{10})",
-            re.MULTILINE,
-        )
-
         pat = re.compile(
-            r"^" + header_prefix + r"\s*(.*)", re.MULTILINE | re.IGNORECASE
+            r"^"
+            + header_prefix
+            + r"(?P<separator>[ \t]*[:=-][ \t]*|[ \t]+)"
+            + r"(?P<value>.*)",
+            re.MULTILINE | re.IGNORECASE,
         )
         matches = list(pat.finditer(region_text))
         if not matches:
@@ -72,7 +93,7 @@ class ParseDrafting(Rule):
         header_start = first.start()
         header_end = first.end()
 
-        items = [first.group(1)]
+        items = [first.group("value")]
 
         # Collect continuation lines until next section header or end
         rest = region_text[header_end:]
@@ -93,10 +114,24 @@ class ParseDrafting(Rule):
 
         mc_text = mc[0].value
         mc_start = mc[0].start
-        region, base = self._find_metadata_region(mc_text)
+        region, base = self._find_metadata_region(mc_text, matches)
 
-        db_items, db_start, db_end = self._collect_section(region, "DRAFTED BY")
-        ab_items, ab_start, ab_end = self._collect_section(region, "APPROVED BY")
+        db_items, db_start, db_end = self._collect_section(
+            region, _DRAFTED_HEADER
+        )
+        ab_items, ab_start, ab_end = self._collect_section(
+            region, _APPROVED_HEADER
+        )
+
+        if not db_items:
+            footer_start = max(0, len(mc_text) - _MAX_FOOTER_DISTANCE)
+            footer = mc_text[footer_start:]
+            db_items, db_start, db_end = self._collect_section(
+                footer, _CANONICAL_DRAFTED_HEADER
+            )
+            if db_items:
+                db_start += footer_start
+                db_end += footer_start
 
         results = []
         if db_items:
