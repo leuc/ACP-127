@@ -45,7 +45,7 @@ from .info_line import ParseInfo
 _GLUED_LETTER = r"[A-Z](?=[:;/.,-])"
 
 _TAGS_RE = re.compile(
-    r"^TAGS(?:" + _GLUED_LETTER + r")?"
+    r"^[ \t]*(?:TAGS|TAGA|TAG(?![SA]))(?:" + _GLUED_LETTER + r")?"
     r"[ \t]*[:;/.,-]?[ \t]*"
     r"(?P<value>\S.*)",
     re.MULTILINE | re.IGNORECASE,
@@ -192,8 +192,6 @@ class ParseTags(Rule):
             candidate_value = mc_text[
                 value_start - mc_start : candidate_end - mc_start
             ].strip()
-            if candidate_end < candidate.end:
-                candidate_value = candidate_value.rstrip(" ,:;/.-\t")
             if not candidate_value:
                 continue
             if first_m is None:
