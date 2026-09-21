@@ -18,12 +18,20 @@ from ..rules.message_content import BuildMessageContent
 from .ref_line import ParseRef
 
 _EO_RE = re.compile(
-    r"^[ \t]*(?P<label>E[ \t]*\.?[ \t]*O[ \t]*\.?)[ \t]*"
+    r"^[ \t]*(?P<label>E[ \t]*\.{0,2}[ \t]*O[ \t]*\.?)[ \t]*"
+    r"(?:"
     r"(?P<prefix_colon>:[ \t]*)?"
     r"(?P<order>11652|11653|12065)"
     r"(?P<separator>[ \t]*[:;,/.'$-]?[ \t]*)"
-    r"(?P<value>[^\r\n]*?)[ \t]*$",
+    r"(?P<value>[^\r\n]*?)"
+    r"|(?P<fallback_value>\S[^\r\n]*?)"
+    r")[ \t]*$",
     re.MULTILINE | re.IGNORECASE,
+)
+_FALLBACK_VALUE_RE = re.compile(
+    r"(?<![A-Z])(?P<value_token>N/?A|[XN]?GDS(?:-[A-Z0-9]+)?|"
+    r"RDS(?:-[A-Z0-9]+)?|XDS(?:-[A-Z0-9]+)?|GS|GDA|DECLAS)(?![A-Z])",
+    re.IGNORECASE,
 )
 
 _PRE_EO_HEADERS = {
@@ -37,6 +45,7 @@ _PRE_EO_HEADERS = {
     "reference",
 }
 _MAX_HEADER_GAP = 512
+_MAX_FALLBACK_HEADER_GAP = 128
 
 
 def eo_line():
@@ -66,8 +75,15 @@ class FindExecutiveOrderCandidates(Rule):
 
         candidates = []
         for found in _EO_RE.finditer(mc_text):
+            fallback_value = found.group("fallback_value")
+            if fallback_value is not None and not _FALLBACK_VALUE_RE.search(
+                fallback_value
+            ):
+                continue
             tags = ["executive_order_candidate", "message_content"]
-            if (
+            if fallback_value is not None:
+                tags.append("fallback_executive_order")
+            elif (
                 found.group("prefix_colon") is None
                 and ":" in found.group("separator")
                 and found.group("value").strip()
@@ -118,7 +134,11 @@ class TagHeaderExecutiveOrder(Rule):
             for match in matches.tagged("message_content")
             if match.name in _PRE_EO_HEADERS
         ]
-        if not anchors:
+        following_anchors = [
+            *matches.tagged("tags_candidate"),
+            *matches.named("reference"),
+        ]
+        if not anchors and not following_anchors:
             return False
 
         for candidate in candidates:
@@ -134,12 +154,26 @@ class TagHeaderExecutiveOrder(Rule):
             preceding = [
                 anchor for anchor in anchors if anchor.end <= candidate.start
             ]
-            if not preceding:
-                continue
-            lower_bound = max(anchor.end for anchor in preceding)
-            if candidate.start - lower_bound > _MAX_HEADER_GAP:
-                continue
-            return candidate
+            max_gap = (
+                _MAX_FALLBACK_HEADER_GAP
+                if "fallback_executive_order" in candidate.tags
+                else _MAX_HEADER_GAP
+            )
+            if preceding:
+                lower_bound = max(anchor.end for anchor in preceding)
+                if candidate.start - lower_bound <= max_gap:
+                    return candidate
+
+            if "fallback_executive_order" in candidate.tags:
+                following = [
+                    anchor
+                    for anchor in following_anchors
+                    if candidate.end <= anchor.start
+                ]
+                if following:
+                    upper_bound = min(anchor.start for anchor in following)
+                    if upper_bound - candidate.end <= max_gap:
+                        return candidate
         return False
 
 
