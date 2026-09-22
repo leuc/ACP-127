@@ -68,7 +68,8 @@ python3 -m src.extractor cables/ --limit 100
 
 ## Random Sampling
 
-Process a random sample of files (overrides --limit if both are given):
+Process a random sample of files (sampling happens first, then --limit
+trims the sample if both are given):
 
 ```bash
 python3 -m src.extractor cables/ --sample 1000

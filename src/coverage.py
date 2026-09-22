@@ -1,8 +1,28 @@
-"""Byte and document coverage tracking."""
+"""Byte and document coverage tracking.
 
+Definitions (kept stable for comparability with stored reports):
+
+- ``matched_bytes``: raw bytes covered by non-private match/marker spans.
+- ``ignored_whitespace_bytes``: unmatched bytes that are whitespace.
+- ``covered_bytes``: ``matched_bytes + ignored_whitespace_bytes`` — the
+  "accounted for" total. ``byte_coverage_pct`` is ``covered / total``.
+- ``unmatched_non_whitespace_bytes``: ``total - covered``. Only substantive,
+  unaccounted text keeps a document below 100%.
+
+The spanning ``message_content`` match (``[text_end, attr_start)``) counts as
+covering the whole content region: the body text is the primary extraction
+output, so "accounted for" includes it by design. Pre-content strip ranges
+(``context["_strip_ranges"]``) are therefore subsumed by that span and are not
+added separately. Intentionally removed boilerplate outside the content region
+(declass markings, reproduction artifacts) is counted via
+``context["_coverage_ranges"]`` (absolute input coordinates).
+"""
+
+import re
+import sys
 from collections import Counter
 
-from .serializer import is_na_value
+from .serializer import is_empty_value, is_na_value
 
 
 # Message Attributes supplied by NARA that have a direct counterpart extracted
@@ -24,11 +44,12 @@ ATTRIBUTE_BODY_FIELDS = (
 
 def _has_value(value):
     """Return whether a serialized field contains a substantive value."""
-    if value is None:
-        return False
-    if isinstance(value, str):
-        return value.strip().lower() not in {"", "n/a", "na"}
-    return bool(value)
+    return not is_empty_value(value)
+
+
+# Matches "TEXT ON-LINE" plus NARA spacing variants ("TEXT ONLINE",
+# "TEXT ON LINE"). Case-insensitive; applied to the upper-cased Locator.
+TEXT_ON_LINE_RE = re.compile(r"TEXT\s+ON[-\s]*LINE", re.IGNORECASE)
 
 
 def has_retrievable_body(document):
@@ -37,7 +58,7 @@ def has_retrievable_body(document):
     locator = attributes.get("Locator")
     return (
         isinstance(locator, str)
-        and "TEXT ON-LINE" in locator.upper()
+        and TEXT_ON_LINE_RE.search(locator) is not None
         and _has_value(document.get("_message_content"))
     )
 
@@ -63,6 +84,43 @@ def missing_body_extractions(document):
         if _has_value(attributes.get(attribute_name))
         and not _has_value(document.get(body_field))
     ]
+
+
+def is_substantive_match(match):
+    """Return whether a match counts as a real extracted field.
+
+    Mirrors ``serializer.result_to_dict`` filtering (skips private, markers and
+    child matches with a parent) plus NA normalization, so ``field_counts`` and
+    ``matched_documents`` agree with the JSON output instead of counting
+    placeholders.
+    """
+    if match.private or match.marker or match.parent:
+        return False
+    if not match.name:
+        return False
+    return not is_na_value(match.name, match.value)
+
+
+def iter_substantive_matches(matches):
+    """Yield ``(name, match)`` once per field name with a substantive value."""
+    seen = set()
+    for match in matches:
+        if not is_substantive_match(match):
+            continue
+        if match.name in seen:
+            continue
+        seen.add(match.name)
+        yield match.name, match
+
+
+def count_fields(matches):
+    """Return ``{field_name: 1}`` for each substantive field in one document."""
+    return {name: 1 for name, _ in iter_substantive_matches(matches)}
+
+
+def has_substantive_match(matches):
+    """Return whether a document has at least one substantive field match."""
+    return any(True for _ in iter_substantive_matches(matches))
 
 
 def calculate_coverage(input_text, matches, extra_ranges=()):
@@ -102,8 +160,9 @@ def calculate_coverage(input_text, matches, extra_ranges=()):
 
     return {
         "total_bytes": len(input_text),
-        "matched_bytes": covered_bytes,
+        "matched_bytes": matched_bytes,
         "ignored_whitespace_bytes": ignored_whitespace_bytes,
+        "covered_bytes": covered_bytes,
         "unmatched_non_whitespace_bytes": unmatched_non_whitespace_bytes,
     }
 
@@ -116,6 +175,7 @@ class CoverageTracker:
         self.matched_documents = 0
         self.total_bytes = 0
         self.matched_bytes = 0
+        self.covered_bytes = 0
         self.ignored_whitespace_bytes = 0
         self.unmatched_non_whitespace_bytes = 0
         self.fully_covered_documents = 0
@@ -125,12 +185,13 @@ class CoverageTracker:
     def record(self, input_text, matches, source=None, extra_ranges=()):
         self.total_documents += 1
 
-        if matches:
+        if has_substantive_match(matches):
             self.matched_documents += 1
 
         stats = calculate_coverage(input_text, matches, extra_ranges)
         self.total_bytes += stats["total_bytes"]
         self.matched_bytes += stats["matched_bytes"]
+        self.covered_bytes += stats["covered_bytes"]
         self.ignored_whitespace_bytes += stats["ignored_whitespace_bytes"]
         unmatched = stats["unmatched_non_whitespace_bytes"]
         self.unmatched_non_whitespace_bytes += unmatched
@@ -138,20 +199,21 @@ class CoverageTracker:
             self.fully_covered_documents += 1
         elif source is not None:
             total = stats["total_bytes"]
-            coverage_pct = (stats["matched_bytes"] / total * 100) if total else 0.0
+            coverage_pct = (stats["covered_bytes"] / total * 100) if total else 0.0
             self.incomplete_documents.append((coverage_pct, unmatched, source))
 
-        seen = set()
-        for match in matches:
-            if match.private or match.marker:
-                continue
-            name = match.name
-            if name and name not in seen and not is_na_value(name, match.value):
-                seen.add(name)
-                self.field_counts[name] += 1
+        for name in count_fields(matches):
+            self.field_counts[name] += 1
 
     @property
     def byte_coverage(self):
+        if self.total_bytes == 0:
+            return 0.0
+        return (self.covered_bytes / self.total_bytes) * 100
+
+    @property
+    def matched_byte_pct(self):
+        """Raw span coverage without whitespace forgiveness (diagnostic)."""
         if self.total_bytes == 0:
             return 0.0
         return (self.matched_bytes / self.total_bytes) * 100
@@ -176,6 +238,8 @@ class CoverageTracker:
             "documents_matched": self.matched_documents,
             "document_coverage_pct": round(self.document_coverage, 2),
             "byte_coverage_pct": round(self.byte_coverage, 2),
+            "matched_bytes": self.matched_bytes,
+            "covered_bytes": self.covered_bytes,
             "whitespace_bytes_ignored": self.ignored_whitespace_bytes,
             "unmatched_non_whitespace_bytes": self.unmatched_non_whitespace_bytes,
             "documents_fully_covered": self.fully_covered_documents,
@@ -186,3 +250,28 @@ class CoverageTracker:
                 k: round(v, 2) for k, v in self.field_rates().items()
             },
         }
+
+    def print_report(self, stream=None):
+        """Write the plaintext coverage summary (extractor stderr format)."""
+        stream = sys.stderr if stream is None else stream
+        summary = self.summary()
+        for key, value in summary.items():
+            if key == "field_match_rates":
+                stream.write(f"{key}:\n")
+                for name, rate in value.items():
+                    stream.write(f"    {name}: {rate:.2f}\n")
+            else:
+                if isinstance(value, float):
+                    stream.write(f"{key}: {value:.2f}\n")
+                else:
+                    stream.write(f"{key}: {value}\n")
+
+        if self.incomplete_documents:
+            stream.write("documents_below_100_pct:\n")
+            for coverage_pct, unmatched, filepath in sorted(
+                self.incomplete_documents, key=lambda entry: (entry[0], entry[2])
+            ):
+                stream.write(
+                    f"    {coverage_pct:.2f}% ({unmatched} unmatched bytes)"
+                    f" {filepath}\n"
+                )

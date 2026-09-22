@@ -12,9 +12,17 @@ import multiprocessing
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from .builder import build_rebulk
-from .coverage import CoverageTracker, calculate_coverage
-from .serializer import result_to_dict, is_na_value
+from .coverage import (
+    CoverageTracker,
+    calculate_coverage,
+    count_fields,
+    has_substantive_match,
+)
+from .serializer import result_to_dict
 
+# Two singletons (not one) by design: ``process_file`` runs in forked
+# ProcessPoolExecutor workers, so a parent-process instance cannot be shared.
+# ``extract_from_text`` serves in-process callers (tests/REPL).
 _REBULK_INSTANCE = None
 
 
@@ -46,17 +54,10 @@ def process_file(filepath):
         byte_stats = calculate_coverage(
             text, matches, context.get("_coverage_ranges", ())
         )
-        matched_doc = 1 if matches else 0
-
-        field_counts = {}
-        seen = set()
-        for match in matches:
-            if match.private or match.marker:
-                continue
-            name = match.name
-            if name and name not in seen and not is_na_value(name, match.value):
-                seen.add(name)
-                field_counts[name] = 1
+        # Same substantive-match definition as CoverageTracker.record, so the
+        # worker/parent numbers cannot drift apart.
+        matched_doc = 1 if has_substantive_match(matches) else 0
+        field_counts = count_fields(matches)
 
         coverage = {
             "total_documents": 1,
@@ -123,7 +124,7 @@ def main():
         "--sample",
         type=int,
         default=None,
-        help="Randomly sample N files (overrides --limit)",
+        help="Randomly sample N files (applied before --limit)",
     )
 
     args = parser.parse_args()
@@ -164,6 +165,11 @@ def main():
                 tracker.matched_documents += coverage["matched_documents"]
                 tracker.total_bytes += coverage["total_bytes"]
                 tracker.matched_bytes += coverage["matched_bytes"]
+                # Old workers emit only "matched_bytes" holding the covered
+                # total; new workers emit both keys. Prefer covered_bytes.
+                tracker.covered_bytes += coverage.get(
+                    "covered_bytes", coverage["matched_bytes"]
+                )
                 tracker.ignored_whitespace_bytes += coverage[
                     "ignored_whitespace_bytes"
                 ]
@@ -175,9 +181,10 @@ def main():
                 ]
                 if coverage["unmatched_non_whitespace_bytes"]:
                     total = coverage["total_bytes"]
-                    coverage_pct = (
-                        coverage["matched_bytes"] / total * 100 if total else 0.0
+                    covered = coverage.get(
+                        "covered_bytes", coverage["matched_bytes"]
                     )
+                    coverage_pct = covered / total * 100 if total else 0.0
                     tracker.incomplete_documents.append(
                         (
                             coverage_pct,
@@ -191,26 +198,7 @@ def main():
             if output:
                 print(output)
 
-    summary = tracker.summary()
-    for key, value in summary.items():
-        if key == "field_match_rates":
-            sys.stderr.write(f"{key}:\n")
-            for k, v in value.items():
-                sys.stderr.write(f"    {k}: {v:.2f}\n")
-        else:
-            if isinstance(value, float):
-                sys.stderr.write(f"{key}: {value:.2f}\n")
-            else:
-                sys.stderr.write(f"{key}: {value}\n")
-
-    if tracker.incomplete_documents:
-        sys.stderr.write("documents_below_100_pct:\n")
-        for coverage_pct, unmatched, filepath in sorted(
-            tracker.incomplete_documents, key=lambda entry: (entry[0], entry[2])
-        ):
-            sys.stderr.write(
-                f"    {coverage_pct:.2f}% ({unmatched} unmatched bytes) {filepath}\n"
-            )
+    tracker.print_report()
 
 
 if __name__ == "__main__":
