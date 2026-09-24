@@ -6,7 +6,7 @@ Definitions (kept stable for comparability with stored reports):
 - ``ignored_whitespace_bytes``: unmatched bytes that are whitespace.
 - ``covered_bytes``: ``matched_bytes + ignored_whitespace_bytes`` — the
   "accounted for" total. ``byte_coverage_pct`` is ``covered / total``.
-- ``unmatched_non_whitespace_bytes``: ``total - covered``. Only substantive,
+  - ``unmatched_non_whitespace_bytes``: ``total - covered``. Only substantive,
   unaccounted text keeps a document below 100%.
 
 The spanning ``message_content`` match (``[text_end, attr_start)``) counts as
@@ -16,6 +16,12 @@ output, so "accounted for" includes it by design. Pre-content strip ranges
 added separately. Intentionally removed boilerplate outside the content region
 (declass markings, reproduction artifacts) is counted via
 ``context["_coverage_ranges"]`` (absolute input coordinates).
+
+Aggregate classification/page/section matches (list values spanning first to
+last marker) are output carriers only: covering their outer bounds would
+claim the gaps between disjoint markers as accounted for. Their
+contribution is skipped here; the individual raw spans recorded in
+``_coverage_ranges`` by their rules count instead.
 """
 
 import re
@@ -23,6 +29,11 @@ import sys
 from collections import Counter
 
 from .serializer import is_empty_value, is_na_value
+
+# Aggregate output carriers whose outer bounds must not count as coverage.
+_AGGREGATE_NAMES = frozenset(
+    {"classification_marker", "page_break", "section_marker"}
+)
 
 
 # Message Attributes supplied by NARA that have a direct counterpart extracted
@@ -48,7 +59,9 @@ def _has_value(value):
 
 
 # Matches "TEXT ON-LINE" plus NARA spacing variants ("TEXT ONLINE",
-# "TEXT ON LINE"). Case-insensitive; applied to the upper-cased Locator.
+# "TEXT ON LINE"). Case-insensitive. MUST stay identical to
+# patterns.locator.TEXT_ON_LINE_RE -- extraction eligibility and the
+# quality report share this single predicate by value.
 TEXT_ON_LINE_RE = re.compile(r"TEXT\s+ON[-\s]*LINE", re.IGNORECASE)
 
 
@@ -140,6 +153,8 @@ def calculate_coverage(input_text, matches, extra_ranges=()):
 
     for match in matches:
         if not match.private:
+            if match.name in _AGGREGATE_NAMES and isinstance(match.value, list):
+                continue
             cover(match.start, match.end)
 
     for marker in matches.markers:
@@ -204,6 +219,45 @@ class CoverageTracker:
 
         for name in count_fields(matches):
             self.field_counts[name] += 1
+
+    def record_summary(self, coverage):
+        """Merge one compact worker coverage summary (no Matches cross IPC).
+
+        The worker computes its own ``calculate_coverage`` /
+        ``count_fields`` and returns only JSON plus this small
+        serializable dict; the parent merges it here instead of
+        duplicating the arithmetic.
+        """
+        self.total_documents += coverage["total_documents"]
+        self.matched_documents += coverage["matched_documents"]
+        self.total_bytes += coverage["total_bytes"]
+        self.matched_bytes += coverage["matched_bytes"]
+        # Old workers emit only "matched_bytes" holding the covered
+        # total; new workers emit both keys. Prefer covered_bytes.
+        self.covered_bytes += coverage.get(
+            "covered_bytes", coverage["matched_bytes"]
+        )
+        self.ignored_whitespace_bytes += coverage["ignored_whitespace_bytes"]
+        self.unmatched_non_whitespace_bytes += coverage[
+            "unmatched_non_whitespace_bytes"
+        ]
+        self.fully_covered_documents += coverage["fully_covered_documents"]
+        if coverage["unmatched_non_whitespace_bytes"]:
+            total = coverage["total_bytes"]
+            covered = coverage.get("covered_bytes", coverage["matched_bytes"])
+            coverage_pct = covered / total * 100 if total else 0.0
+            self.incomplete_documents.append(
+                (
+                    coverage_pct,
+                    coverage["unmatched_non_whitespace_bytes"],
+                    coverage["file"],
+                )
+            )
+        for name, count in coverage["field_counts"].items():
+            self.field_counts[name] += count
+
+    # Backwards-compatible alias for the worker-merge entry point.
+    merge_stats = record_summary
 
     @property
     def byte_coverage(self):

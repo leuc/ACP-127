@@ -1,9 +1,9 @@
 """Extract the TO (addressee) lines from message content.
 
 The TO field lists primary addressees and may span multiple lines.
-It appears after the FM line in the routing header. The routing header
-is bounded by the first blank line after FM. INFO lines act as a
-section boundary within the header.
+It appears after the FM line in the routing header. Uses the joint
+routing walk (see patterns.routing.walk_routing) shared with INFO, so
+neither value can swallow later header lines.
 
 Output field:
   _to — the addressee text, "TO " prefix stripped, lines joined with spaces
@@ -11,10 +11,16 @@ Output field:
 
 from rebulk import Rebulk, Rule
 from rebulk.match import Match
-from rebulk.remodule import re
 
+from ..content_view import (
+    TAG_HEADER,
+    TAG_STRIP,
+    ZONE_ROUTING,
+    get_view,
+    register_field_span,
+)
 from ..rules.message_content import BuildMessageContent
-from .routing import find_routing_header
+from .routing import walk_routing
 
 
 def to_line():
@@ -25,86 +31,47 @@ def to_line():
 
 
 class ParseTo(Rule):
-    """Parse TO addressee lines from the routing header region.
+    """Parse TO addressee lines from the joint routing walk.
 
-    The routing header runs from FM to the first blank line.
-    TO lines and their continuations are extracted from within that region.
-    INFO lines mark section boundaries — they are skipped for TO output.
+    The routing window runs from FM to the first blank line or known
+    header label. TO lines and their continuations are extracted with
+    exact per-line intervals; INFO lines alternate without being
+    absorbed into the TO value.
     """
 
     priority = 32
     dependency = BuildMessageContent
 
-    @staticmethod
-    def _collect_to_lines(header_text):
-        """Collect TO addressee lines including continuations.
-
-        Walks lines from FM through the routing header.
-        Lines starting with 'TO ' begin a TO section.
-        Lines starting with 'INFO ' begin an INFO section (skipped for TO output).
-        Lines without a prefix belong to the current section.
-        """
-        lines = header_text.split("\n")
-        parts = []
-        current_section = None
-        range_start = None
-        range_end = None
-
-        offset = 0
-        for line in lines:
-            stripped = line.strip()
-            stripped_upper = stripped.upper()
-            if not stripped:
-                offset += len(line) + 1
-                continue
-
-            if stripped_upper.startswith("TO "):
-                current_section = "TO"
-                content = stripped[3:].strip()
-                parts.append(content)
-                if range_start is None:
-                    range_start = offset
-                range_end = offset + len(line)
-            elif stripped_upper.startswith("INFO "):
-                current_section = "INFO"
-            elif current_section == "TO":
-                parts.append(stripped)
-                range_end = offset + len(line)
-            # else: continuation after INFO or start — skip
-
-            offset += len(line) + 1
-
-        if not parts:
-            return None, None, None
-        return parts, range_start, range_end
-
     def when(self, matches, context):
+        view = get_view(context)
         mc = matches.named("message_content")
-        if not mc:
+        if view is None or not mc:
             return False
 
-        mc_text = mc[0].value
-        mc_start = mc[0].start
-
-        header = find_routing_header(mc_text)
-        if header is None:
-            return False
-        header_start, header_end, header_text = header
-
-        parts, to_start_rel, to_end_rel = self._collect_to_lines(header_text)
-        if not parts:
+        mc_text = view.text
+        walked = walk_routing(mc_text)
+        if walked is None or walked["to"] is None:
             return False
 
-        value = " ".join(parts)
-        to_start = mc_start + header_start + to_start_rel
-        to_end = mc_start + header_start + to_end_rel
+        value = walked["to"]["value"]
+        spans = walked["to"]["spans"]
+        if not value.strip() or not spans:
+            return False
+
+        raw_spans = []
+        for clean_start, clean_end in spans:
+            bounding = view.clean_to_raw_bounding(clean_start, clean_end)
+            if bounding is None:
+                return False
+            raw_spans.append(bounding)
+            register_field_span(context, "to", clean_start, clean_end)
 
         return Match(
-            to_start,
-            to_end,
+            raw_spans[0][0],
+            raw_spans[-1][1],
             value=value,
             name="to",
-            tags=["message_content"],
+            tags=["message_content", ZONE_ROUTING, TAG_STRIP, TAG_HEADER],
         )
 
     def then(self, matches, when_response, context):

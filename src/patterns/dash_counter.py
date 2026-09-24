@@ -101,23 +101,49 @@ class CollectDashCounters(Rule):
     priority = 32
 
     def when(self, matches, context):
+        from ..content_view import content_region, get_view
+
         markers = list(matches.named("dash_counter"))
         if not markers:
             return False
-        return markers
+        region = content_region(matches)
+        view = get_view(context)
+        if region is None or view is None:
+            return False
+        text_end, attr_start = region
+        scoped = [
+            m for m in markers if text_end <= m.start < attr_start
+        ]
+        if not scoped:
+            return False
+        return scoped
 
     def then(self, matches, when_response, context):
+        from ..content_view import (
+            TAG_HEADER,
+            TAG_STRIP,
+            ZONE_PRE,
+            get_view,
+            register_field_span,
+        )
+
         markers = when_response
         first = markers[0]
         for m in markers:
             if m in matches:
                 matches.remove(m)
+        view = get_view(context)
+        if view is not None:
+            clean_start = view.raw_to_clean(first.start)
+            clean_end = view.raw_to_clean(first.end - 1)
+            if clean_start is not None and clean_end is not None:
+                register_field_span(context, "dash_counters", clean_start, clean_end + 1)
         matches.append(
             Match(
                 first.start,
                 first.end,
                 value=first.value,
                 name="dash_counters",
-                tags=["dash_counter"],
+                tags=["dash_counter", "message_content", ZONE_PRE, TAG_STRIP, TAG_HEADER],
             )
         )

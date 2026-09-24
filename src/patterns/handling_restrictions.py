@@ -15,7 +15,6 @@ from rebulk.remodule import re
 
 from ..rules.message_content import BuildMessageContent
 from .eo_line import ParseExecutiveOrder
-from .routing import find_routing_header
 from .subject_line import ParseSubject
 from .tags_line import ParseTags
 
@@ -67,18 +66,23 @@ class FindHandlingRestrictionCandidates(Rule):
     dependency = BuildMessageContent
 
     def when(self, matches, context):
+        from ..content_view import get_view
+
         mc = matches.named("message_content")
-        if not mc:
+        view = get_view(context)
+        if not mc or view is None:
             return False
 
-        mc_text = mc[0].value
-        mc_start = mc[0].start
+        mc_text = view.text
         candidates = []
         for found in _HANDLING_RE.finditer(mc_text):
+            bounding = view.clean_to_raw_bounding(found.start(), found.end())
+            if bounding is None:
+                continue
             candidates.append(
                 Match(
-                    mc_start + found.start(),
-                    mc_start + found.end(),
+                    bounding[0],
+                    bounding[1],
                     value=_split_values(found.group("handling_restrictions")),
                     name="handling_restriction_marker",
                     tags=["handling_restriction_candidate", "message_content"],
@@ -105,37 +109,53 @@ class TagHeaderHandlingRestrictions(Rule):
     consequence = AppendTags(["header"])
 
     def when(self, matches, context):
+        from ..content_view import get_view
+        from .routing import walk_routing
+
         mc = matches.named("message_content")
-        if not mc:
+        view = get_view(context)
+        if not mc or view is None:
             return False
 
-        mc_text = mc[0].value
-        mc_start = mc[0].start
+        mc_text = view.text
+
+        def _clean_of(raw_start, raw_end):
+            clean_start = view.raw_to_clean(raw_start)
+            clean_end = view.raw_to_clean(raw_end - 1)
+            if clean_start is None or clean_end is None:
+                return None
+            return (clean_start, clean_end + 1)
+
         candidates = sorted(
             matches.tagged("handling_restriction_candidate"),
             key=lambda match: match.start,
         )
         if not candidates:
             return False
+        # Candidate positions in clean coordinates (None when unmappable).
+        clean_pos = {}
+        for candidate in candidates:
+            clean_pos[id(candidate)] = _clean_of(candidate.start, candidate.end)
 
         anchors = []
-        routing = find_routing_header(mc_text)
-        if routing is not None:
-            routing_start = mc_start + routing[0]
-            routing_end = routing_start + routing[1]
+        walked = walk_routing(mc_text)
+        if walked is not None:
+            routing_end = walked["header_end"]
             anchors.append(routing_end)
+            routing_start = walked["header_start"]
         else:
             routing_start = None
             routing_end = None
 
-        header_ends = [
-            match.start
-            for match in matches.tagged("message_content")
-            if match.name in {"executive_order", "tags", "subject"}
-        ]
+        header_ends = []
+        for match in matches.tagged("message_content"):
+            if match.name in {"executive_order", "tags", "subject"}:
+                projected = _clean_of(match.start, match.end)
+                if projected is not None:
+                    header_ends.append(projected[0])
         if header_ends:
             upper_bound = min(header_ends)
-            lower_bound = routing_start if routing_start is not None else mc_start
+            lower_bound = routing_start if routing_start is not None else 0
         else:
             upper_bound = None
             lower_bound = None
@@ -148,41 +168,49 @@ class TagHeaderHandlingRestrictions(Rule):
                 raw = section.get("raw", "")
                 if not raw:
                     continue
-                position = mc_text.find(raw, search_start)
+                marker_line = next(
+                    (line for line in raw.splitlines() if line), ""
+                )
+                if not marker_line:
+                    continue
+                position = mc_text.find(marker_line, search_start)
                 if position < 0:
                     continue
-                anchors.append(mc_start + position + len(raw))
-                search_start = position + len(raw)
+                anchors.append(position + len(marker_line))
+                search_start = position + len(marker_line)
 
         tagged = []
         if upper_bound is not None:
             tagged.extend(
                 candidate
                 for candidate in candidates
-                if lower_bound <= candidate.start < upper_bound
+                if clean_pos[id(candidate)] is not None
+                and lower_bound <= clean_pos[id(candidate)][0] < upper_bound
             )
 
         if routing_start is not None:
             cursor = routing_end
             for candidate in reversed(candidates):
-                if not (routing_start <= candidate.start < cursor):
+                pos = clean_pos[id(candidate)]
+                if pos is None or not (routing_start <= pos[0] < cursor):
                     continue
-                trailing = mc_text[candidate.end - mc_start : cursor - mc_start]
+                trailing = mc_text[pos[1]:cursor]
                 if trailing.strip():
                     break
                 tagged.append(candidate)
-                cursor = candidate.start
+                cursor = pos[0]
 
         for anchor in anchors:
             cursor = anchor
             for candidate in candidates:
-                if candidate.start < cursor:
+                pos = clean_pos[id(candidate)]
+                if pos is None or pos[0] < cursor:
                     continue
-                gap = mc_text[cursor - mc_start : candidate.start - mc_start]
+                gap = mc_text[cursor:pos[0]]
                 if gap.strip():
                     break
                 tagged.append(candidate)
-                cursor = candidate.end
+                cursor = pos[1]
 
         unique = []
         seen = set()
@@ -201,6 +229,14 @@ class CollectHandlingRestrictions(Rule):
     dependency = TagHeaderHandlingRestrictions
 
     def when(self, matches, context):
+        from ..content_view import (
+            TAG_HEADER,
+            TAG_STRIP,
+            ZONE_CLUSTER,
+            get_view,
+            register_field_span,
+        )
+
         markers = sorted(
             (
                 match
@@ -213,22 +249,35 @@ class CollectHandlingRestrictions(Rule):
             return False
 
         mc = matches.named("message_content")
-        if mc:
-            mc_text = mc[0].value
-            mc_start = mc[0].start
+        view = get_view(context)
+        if mc and view is not None:
+            mc_text = view.text
             routing_matches = [
                 match for name in ("to", "info") for match in matches.named(name)
             ]
             for routing_match in routing_matches:
+                routing_clean = view.raw_to_clean(routing_match.start)
                 for marker in reversed(markers):
+                    marker_clean_start = view.raw_to_clean(marker.start)
+                    marker_clean_end = view.raw_to_clean(marker.end - 1)
+                    if marker_clean_start is None or marker_clean_end is None:
+                        continue
                     raw = mc_text[
-                        marker.start - mc_start : marker.end - mc_start
+                        marker_clean_start : marker_clean_end + 1
                     ].strip()
                     value = routing_match.value.rstrip(" \t,;/+-")
                     if value.upper().endswith(raw.upper()):
                         routing_match.value = value[: -len(raw)].rstrip(
                             " \t,;/+-"
                         )
+            # Register one exact interval per accepted designator line.
+            for marker in markers:
+                clean_start = view.raw_to_clean(marker.start)
+                clean_end = view.raw_to_clean(marker.end - 1)
+                if clean_start is not None and clean_end is not None:
+                    register_field_span(
+                        context, "handling_restrictions", clean_start, clean_end + 1
+                    )
 
         values = [value for marker in markers for value in marker.value]
         return Match(
@@ -236,7 +285,7 @@ class CollectHandlingRestrictions(Rule):
             markers[-1].end,
             value=values,
             name="handling_restrictions",
-            tags=["message_content"],
+            tags=["message_content", ZONE_CLUSTER, TAG_STRIP, TAG_HEADER],
         )
 
     def then(self, matches, when_response, context):

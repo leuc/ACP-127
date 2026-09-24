@@ -14,12 +14,12 @@ from .patterns.dtg import dtg
 from .patterns.distribution import distribution
 from .patterns.from_line import from_line
 from .patterns.to_line import to_line
-from .patterns.info_line import info_line
+from .patterns.info_line import ParseInfo, info_line
 from .patterns.handling_restrictions import handling_restrictions
 from .patterns.drafting import drafting
 from .patterns.eo_line import eo_line
-from .patterns.tags_line import tags_line
-from .patterns.subject_line import subject_line
+from .patterns.tags_line import FindTagsCandidates, ParseTags, tags_line
+from .patterns.subject_line import ParseSubject, subject_line
 from .patterns.ref_line import ref_line
 from .patterns.section_marker import section_marker
 from .rules.validate import (
@@ -36,6 +36,11 @@ from .rules.header_removal import RemoveHeaders
 
 def build_rebulk():
     """Build and return the main Rebulk object with all patterns and rules."""
+    # Static cross-module dependency (declared once here, not mutated at
+    # factory time): ParseTags needs ParseSubject's upper bound in
+    # addition to its module-local FindTagsCandidates + ParseInfo edge.
+    ParseTags.dependency = (FindTagsCandidates, ParseInfo, ParseSubject)
+
     rebulk = Rebulk()
 
     rebulk.rebulk(reproduction_artifacts())

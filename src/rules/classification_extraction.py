@@ -2,7 +2,10 @@
 
 Classification markers (UNCLASSIFIED, CONFIDENTIAL, SECRET, etc.) that
 are directly NEXT to page_break or end_marker are extracted to JSON and
-removed from the text body.
+removed from the text body. Validity uses exact adjacency to those
+structures -- the intervening source bytes must be blank (or already
+recognized removal spans), not a byte cap or an allowance of arbitrary
+nonblank lines. Only accepted marker lines are stripped.
 """
 
 from rebulk import Rule
@@ -11,23 +14,24 @@ from rebulk.rules import Consequence
 
 from ..patterns.locator import TagLocatorTextOnline
 
-_MAX_GAP = 500
-_MAX_END_DISTANCE = 1500
-
 
 class StripClassificationMarkers(Consequence):
-    """Strip classification markers from text, output aggregated match."""
+    """Strip accepted classification markers, output aggregated match."""
 
     def then(self, matches, when_response, context):
-        text_end, attr_start, all_matches, valid_matches, output_value = when_response
+        text_end, attr_start, valid_matches, output_value = when_response
 
         ranges = context.setdefault("_strip_ranges", [])
-        for m in all_matches:
+        coverage_ranges = context.setdefault("_coverage_ranges", [])
+        for m in valid_matches:
             start = m.start - text_end
             end = m.end - text_end
             if start < 0:
                 start = 0
             ranges.append((start, end))
+            # Individual raw spans: coverage must use these rather than
+            # the aggregate outer bounds (see coverage.calculate_coverage).
+            coverage_ranges.append((m.start, m.end))
 
         for old in matches.named("classification_marker"):
             if old in matches:
@@ -78,7 +82,7 @@ class ExtractClassificationMarker(Rule):
             return False
 
         unique_values = list(dict.fromkeys(m.value for m in valid))
-        return text_end, attr_start, cm_matches, valid, unique_values
+        return text_end, attr_start, valid, unique_values
 
     def _filter_adjacent(self, cm_matches, matches, text_end, attr_start):
         """Only keep markers directly NEXT to page_break or end_marker."""
@@ -97,35 +101,44 @@ class ExtractClassificationMarker(Rule):
         return valid
 
     @staticmethod
-    def _near_page_break(m, text, page_breaks):
+    def _gap_is_blank(text, start, end):
+        """Return whether the intervening bytes are blank/removal spans.
+
+        Exact adjacency: only whitespace between the marker and the
+        page/end structure. An empty gap (abutting matches) is the
+        tightest adjacency. No byte caps, no nonblank-line allowance.
+        """
+        if start >= end:
+            return True
+        return not text[start:end].strip()
+
+    @classmethod
+    def _near_page_break(cls, m, text, page_breaks):
         for pb in page_breaks:
             if m.end <= pb.start:
-                gap = text[m.end : pb.start]
+                gap_blank = cls._gap_is_blank(text, m.end, pb.start)
             elif pb.end <= m.start:
-                gap = text[pb.end : m.start]
+                gap_blank = cls._gap_is_blank(text, pb.end, m.start)
             else:
                 continue
-            if not gap.strip() and len(gap) < _MAX_GAP:
+            if gap_blank:
                 return True
         return False
 
-    @staticmethod
-    def _near_end_marker(m, text, end_markers):
+    @classmethod
+    def _near_end_marker(cls, m, text, end_markers):
         for em in end_markers:
             if em.start >= m.end:
-                gap = text[m.end : em.start]
-                if not gap.strip() and len(gap) < _MAX_GAP:
+                if cls._gap_is_blank(text, m.end, em.start):
                     return True
         return False
 
-    @staticmethod
-    def _near_content_end(m, text, content_end):
+    @classmethod
+    def _near_content_end(cls, m, text, content_end):
         if content_end is None:
             return False
-        distance = content_end - m.end
-        if 0 < distance < _MAX_END_DISTANCE:
-            gap = text[m.end : content_end]
-            non_blank = [l for l in gap.split("\n") if l.strip()]
-            if len(non_blank) <= 4:
-                return True
-        return False
+        if m.end >= content_end:
+            return False
+        # Content-end path must not accept substantive lines: only a
+        # blank gap to the attributes boundary validates.
+        return cls._gap_is_blank(text, m.end, content_end)

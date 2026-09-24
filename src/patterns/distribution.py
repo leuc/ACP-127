@@ -12,7 +12,14 @@ from rebulk import Rebulk, Rule
 from rebulk.match import Match
 from rebulk.remodule import re
 
+from ..content_view import (
+    TAG_HEADER,
+    TAG_STRIP,
+    ZONE_PRE,
+    get_view,
+)
 from ..rules.message_content import BuildMessageContent
+from .from_line import ValidateFrom
 
 _CODE_RE = re.compile(r"(?P<code>\w+)-(?P<count>\d+)")
 _SUM_RE = re.compile(r"/\s*(?P<expected>\d+)(?:\s+[RW])?\s*$", re.MULTILINE)
@@ -89,10 +96,12 @@ class ParseDistribution(Rule):
     """Parse distribution (ACTION/INFO addressee codes) from message content.
 
     Uses the /N sum line (e.g. "/050 W") to find where distribution ends.
+    Runs after ValidateFrom so the no-sum/no-dash FM fallback can use an
+    accepted ``from`` match.
     """
 
-    priority = 64
-    dependency = BuildMessageContent
+    priority = 32
+    dependency = (BuildMessageContent, ValidateFrom)
 
     @staticmethod
     def _section_ranges(matches, mc_text):
@@ -120,8 +129,10 @@ class ParseDistribution(Rule):
         return ranges
 
     @classmethod
-    def _repeated_headers(cls, matches, mc_text, mc_start, search_start):
+    def _repeated_headers(cls, matches, mc_text, view, search_start, context):
         """Build private removal matches for later transmission headers."""
+        from ..content_view import register_field_span
+
         section_ranges = cls._section_ranges(matches, mc_text)
         if not section_ranges:
             return []
@@ -154,10 +165,16 @@ class ParseDistribution(Rule):
                 if unknown_num_m:
                     repeat_start = unknown_num_m.start()
 
+            # Register one interval per repeated block; the private Match
+            # below is only a coverage/output carrier.
+            register_field_span(context, "distribution", repeat_start, section_end)
+            bounding = view.clean_to_raw_bounding(repeat_start, section_end)
+            if bounding is None:
+                continue
             repeated.append(
                 Match(
-                    mc_start + repeat_start,
-                    mc_start + section_end,
+                    bounding[0],
+                    bounding[1],
                     name="distribution",
                     tags=["message_content"],
                     private=True,
@@ -166,12 +183,14 @@ class ParseDistribution(Rule):
         return repeated
 
     def when(self, matches, context):
+        from ..content_view import register_field_span
+
         mc = matches.named("message_content")
-        if not mc:
+        view = get_view(context)
+        if not mc or view is None:
             return False
 
-        mc_text = mc[0].value
-        mc_start = mc[0].start
+        mc_text = view.text
 
         # Find first ACTION or ORIGIN line — distribution starts there.
         # Leading whitespace before the keyword (a NARA reproduction
@@ -195,8 +214,8 @@ class ParseDistribution(Rule):
         # Find /N sum line to determine distribution end. Some documents
         # replace the numeric "/NNN" copy count with a non-numeric token
         # (e.g. "( ISO )") — when no sum marker is found, fall back to the
-        # dash counter line (or the FM line) as the end boundary instead,
-        # same fallback order as drafting.py's metadata-region search.
+        # dash counter line (or the accepted FM line) as the end boundary
+        # instead, same fallback order as drafting.py's metadata-region search.
         dash_m = _DASH_BOUNDARY_RE.search(mc_text, dist_start)
         sum_m = _SUM_RE.search(
             mc_text,
@@ -210,11 +229,24 @@ class ParseDistribution(Rule):
             if dash_m:
                 dist_end = dash_m.start()
             else:
-                region_start = mc_start + dist_start
-                from_ms = [m for m in matches.named("from") if m.start >= region_start]
+                from_ms = [
+                    m
+                    for m in matches.named("from")
+                    if "message_content" in (m.tags or [])
+                ]
                 if not from_ms:
                     return False
-                dist_end = min(m.start for m in from_ms) - mc_start
+                # Project the accepted FM match back to clean coordinates
+                # for the bound (it is already validated in-region).
+                fm_clean = None
+                for m in from_ms:
+                    candidate = view.raw_to_clean(m.start)
+                    if candidate is not None:
+                        fm_clean = candidate
+                        break
+                if fm_clean is None or fm_clean <= dist_start:
+                    return False
+                dist_end = fm_clean
 
         dist_text = mc_text[dist_start:dist_end]
 
@@ -226,15 +258,19 @@ class ParseDistribution(Rule):
             distribution_value["unknown_num"] = unknown_num
         distribution_value.update(parsed)
 
+        bounding = view.clean_to_raw_bounding(dist_start, dist_end)
+        if bounding is None:
+            return False
+        register_field_span(context, "distribution", dist_start, dist_end)
         dist_match = Match(
-            mc_start + dist_start,
-            mc_start + dist_end,
+            bounding[0],
+            bounding[1],
             value=distribution_value,
             name="distribution",
-            tags=["message_content"],
+            tags=["message_content", ZONE_PRE, TAG_STRIP, TAG_HEADER],
         )
         repeated = self._repeated_headers(
-            matches, mc_text, mc_start, dist_end
+            matches, mc_text, view, dist_end, context
         )
         return dist_match, repeated
 

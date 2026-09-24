@@ -189,7 +189,10 @@ class ExtendAttributeValue(Rule):
 class RemoveAttributesBeforeMarker(Rule):
     """Remove attribute matches that occur before the Message Attributes marker."""
 
-    priority = 128
+    # 130 (not 128): explicit ordering above ExtractPageBreak (128).
+    # Same-priority ties previously left rule order to registration
+    # order; the numeric gap preserves that semantic order deterministically.
+    priority = 130
     dependency = ExtendAttributeValue
     consequence = RemoveMatch
 
@@ -218,7 +221,10 @@ class MergeContinuationLines(Rule):
     next attribute match.
     """
 
-    priority = 96
+    # 98 (not 96): explicit ordering above BuildMessageContent (96).
+    # Attribute continuation merge is independent of later body parsing
+    # but must have a deterministic position in the order.
+    priority = 98
     dependency = RemoveAttributesBeforeMarker
     consequence = [RemoveMatch, AppendMatch]
 

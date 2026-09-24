@@ -66,12 +66,14 @@ class FindExecutiveOrderCandidates(Rule):
     dependency = BuildMessageContent
 
     def when(self, matches, context):
+        from ..content_view import get_view
+
         mc = matches.named("message_content")
-        if not mc:
+        view = get_view(context)
+        if not mc or view is None:
             return False
 
-        mc_text = mc[0].value
-        mc_start = mc[0].start
+        mc_text = view.text
 
         candidates = []
         for found in _EO_RE.finditer(mc_text):
@@ -89,10 +91,13 @@ class FindExecutiveOrderCandidates(Rule):
                 and found.group("value").strip()
             ):
                 tags.append("legacy_executive_order")
+            bounding = view.clean_to_raw_bounding(found.start(), found.end())
+            if bounding is None:
+                continue
             candidates.append(
                 Match(
-                    mc_start + found.start(),
-                    mc_start + found.end(),
+                    bounding[0],
+                    bounding[1],
                     value=found.group(0).strip(),
                     name="executive_order_marker",
                     tags=tags,
@@ -184,6 +189,14 @@ class ParseExecutiveOrder(Rule):
     dependency = TagHeaderExecutiveOrder
 
     def when(self, matches, context):
+        from ..content_view import (
+            TAG_HEADER,
+            TAG_STRIP,
+            ZONE_CLUSTER,
+            get_view,
+            register_field_span,
+        )
+
         markers = sorted(
             (
                 match
@@ -196,12 +209,18 @@ class ParseExecutiveOrder(Rule):
             return False
 
         marker = markers[0]
+        view = get_view(context)
+        if view is not None:
+            clean_start = view.raw_to_clean(marker.start)
+            clean_end = view.raw_to_clean(marker.end - 1)
+            if clean_start is not None and clean_end is not None:
+                register_field_span(context, "executive_order", clean_start, clean_end + 1)
         return Match(
             marker.start,
             marker.end,
             value=marker.value,
             name="executive_order",
-            tags=["message_content"],
+            tags=["message_content", ZONE_CLUSTER, TAG_STRIP, TAG_HEADER],
         )
 
     def then(self, matches, when_response, context):

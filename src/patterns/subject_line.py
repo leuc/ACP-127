@@ -125,6 +125,23 @@ def _candidate_distance(candidate):
     return _MAX_LABEL_DISTANCE + 1
 
 
+def _projected_candidate(view, found, tags):
+    """Project a cleaned-view candidate to raw positions (or None)."""
+    from rebulk.match import Match as _Match
+
+    bounding = view.clean_to_raw_bounding(found.start(), found.end())
+    if bounding is None:
+        return None
+    return _Match(
+        bounding[0],
+        bounding[1],
+        value=found.group("value").strip(),
+        name="subject_marker",
+        tags=tags,
+        private=True,
+    )
+
+
 def _label_patterns(label):
     """Return regex fragments one edit or adjacent swap from ``label``."""
     patterns = {label}
@@ -210,12 +227,14 @@ class FindSubjectCandidates(Rule):
     dependency = BuildMessageContent
 
     def when(self, matches, context):
+        from ..content_view import get_view
+
         mc = matches.named("message_content")
-        if not mc:
+        view = get_view(context)
+        if not mc or view is None:
             return False
 
-        mc_text = mc[0].value
-        mc_start = mc[0].start
+        mc_text = view.text
         candidates = []
         for found, label, confidence in _subject_matches(mc_text):
             separator = found.group("separator")
@@ -235,16 +254,9 @@ class FindSubjectCandidates(Rule):
                 and raw == raw.lstrip(" \t")
             ):
                 tags.append("legacy_subject")
-            candidates.append(
-                Match(
-                    mc_start + found.start(),
-                    mc_start + found.end(),
-                    value=found.group("value").strip(),
-                    name="subject_marker",
-                    tags=tags,
-                    private=True,
-                )
-            )
+            candidate = _projected_candidate(view, found, tags)
+            if candidate is not None:
+                candidates.append(candidate)
         return candidates or False
 
     def then(self, matches, when_response, context):
@@ -374,8 +386,11 @@ class ParseSubject(Rule):
     dependency = TagHeaderSubject
 
     def when(self, matches, context):
+        from ..content_view import TAG_KEEP, ZONE_CLUSTER, get_view
+
         mc = matches.named("message_content")
-        if not mc:
+        view = get_view(context)
+        if not mc or view is None:
             return False
 
         markers = sorted(
@@ -390,10 +405,13 @@ class ParseSubject(Rule):
             return False
 
         marker = markers[0]
-        mc_text = mc[0].value
-        mc_start = mc[0].start
-        start = marker.start - mc_start
-        marker_end = marker.end - mc_start
+        mc_text = view.text
+        clean_marker_start = view.raw_to_clean(marker.start)
+        clean_marker_end = view.raw_to_clean(marker.end - 1)
+        if clean_marker_start is None or clean_marker_end is None:
+            return False
+        start = clean_marker_start
+        marker_end = clean_marker_end + 1
         first_val = marker.value
 
         rest = mc_text[marker_end:]
@@ -401,11 +419,10 @@ class ParseSubject(Rule):
         blank_line = _BLANK_LINE_RE.search(rest)
         if blank_line:
             boundaries.append(blank_line.start())
-        boundaries.extend(
-            reference.start - marker.end
-            for reference in matches.named("reference")
-            if reference.start >= marker.end
-        )
+        for reference in matches.named("reference"):
+            ref_clean = view.raw_to_clean(reference.start)
+            if ref_clean is not None and ref_clean >= marker_end:
+                boundaries.append(ref_clean - marker_end)
         block_end = min(boundaries) if boundaries else 0
         block_text = mc_text[marker_end : marker_end + block_end]
         block_lines = [line for line in block_text.splitlines() if line.strip()]
@@ -452,12 +469,15 @@ class ParseSubject(Rule):
 
         value = " ".join(parts)
 
+        bounding = view.clean_to_raw_bounding(start, marker_end + end_offset)
+        if bounding is None:
+            return False
         return Match(
-            mc_start + start,
-            mc_start + marker_end + end_offset,
+            bounding[0],
+            bounding[1],
             value=value,
             name="subject",
-            tags=["message_content"],
+            tags=["message_content", ZONE_CLUSTER, TAG_KEEP],
         )
 
     def then(self, matches, when_response, context):
