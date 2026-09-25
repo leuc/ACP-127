@@ -83,6 +83,10 @@ def dash_counter():
         tags=["dash_counter"],
         private_names=["g1", "g1z", "g2", "g2z", "copies"],
         formatter=_parse_dash_counter_line,
+        # Private candidate: only the CollectDashCounters final
+        # (structured dict under "dash_counters") may serialize. The raw
+        # name must never leak as "_dash_counter" when conversion declines.
+        private=True,
     )
 
     rebulk.rules(CollectDashCounters)
@@ -93,9 +97,11 @@ def dash_counter():
 class CollectDashCounters(Rule):
     """Reduce dash counter markers to a single value.
 
-    Only the first marker is kept — there should be exactly one
+    Only the first in-region marker is kept — there should be exactly one
     per document. Its value is already the structured dict computed
-    by the pattern's formatter.
+    by the pattern's formatter. ALL raw markers are always consumed, so
+    no unconverted "dash_counter" match can survive to serialization:
+    without a validated region/view the rule emits nothing.
     """
 
     priority = 32
@@ -106,17 +112,15 @@ class CollectDashCounters(Rule):
         markers = list(matches.named("dash_counter"))
         if not markers:
             return False
+        first_scoped = None
         region = content_region(matches)
-        view = get_view(context)
-        if region is None or view is None:
-            return False
-        text_end, attr_start = region
-        scoped = [
-            m for m in markers if text_end <= m.start < attr_start
-        ]
-        if not scoped:
-            return False
-        return scoped
+        if region is not None and get_view(context) is not None:
+            text_end, attr_start = region
+            for m in sorted(markers, key=lambda m: m.start):
+                if text_end <= m.start < attr_start:
+                    first_scoped = m
+                    break
+        return markers, first_scoped
 
     def then(self, matches, when_response, context):
         from ..content_view import (
@@ -127,11 +131,12 @@ class CollectDashCounters(Rule):
             register_field_span,
         )
 
-        markers = when_response
-        first = markers[0]
+        markers, first = when_response
         for m in markers:
             if m in matches:
                 matches.remove(m)
+        if first is None:
+            return True
         view = get_view(context)
         if view is not None:
             clean_start = view.raw_to_clean(first.start)

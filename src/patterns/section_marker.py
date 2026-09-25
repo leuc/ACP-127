@@ -31,6 +31,10 @@ def section_marker():
         tags=["message_content"],
         flags=re.MULTILINE | re.IGNORECASE,
         every=True,
+        # Private candidate: only the ExtractSectionMarker aggregate
+        # (list of section dicts) may serialize. Unconvertible raw matches
+        # must never leak as last-wins strings into JSON.
+        private=True,
         private_names=[
             "classification",
             "section_number",
@@ -59,25 +63,28 @@ class ExtractSectionMarker(Rule):
     def when(self, matches, context):
         from ..content_view import content_region, get_view
 
+        markers = list(matches.named("section_marker"))
+        if not markers:
+            return False
+
         mc = matches.named("message_content")
         view = get_view(context)
         region = content_region(matches)
         if not mc or view is None or region is None:
-            return False
+            # Cannot convert: drop every raw match so none survives to
+            # serialization as an unconverted string.
+            return markers, [], []
 
-        mc_text = view.text
         text_end, attr_start = region
 
-        markers = [
-            m
-            for m in matches.named("section_marker")
-            if text_end <= m.start < attr_start
+        in_region = [
+            m for m in markers if text_end <= m.start < attr_start
         ]
-        if not markers:
-            return False
+        if not in_region:
+            return markers, [], []
 
         sections = []
-        for m in markers:
+        for m in in_region:
             raw = m.raw
             parts = raw.split()
             section_info = {"raw": raw}
@@ -91,7 +98,7 @@ class ExtractSectionMarker(Rule):
                 pass
             sections.append(section_info)
 
-        return markers, sections
+        return markers, sections, in_region
 
     def then(self, matches, when_response, context):
         from ..content_view import (
@@ -102,13 +109,13 @@ class ExtractSectionMarker(Rule):
             register_field_span,
         )
 
-        markers, sections = when_response
+        to_remove, sections, kept = when_response
         view = get_view(context)
         coverage_ranges = context.setdefault("_coverage_ranges", [])
         if view is not None:
             # Register one exact interval per actual section line --
             # never the bounding span of the aggregate output carrier.
-            for m in markers:
+            for m in kept:
                 clean_start = view.raw_to_clean(m.start)
                 clean_end = view.raw_to_clean(m.end - 1)
                 if clean_start is not None and clean_end is not None:
@@ -117,17 +124,20 @@ class ExtractSectionMarker(Rule):
                         register_field_span(
                             context, "section_marker", clean_start, clean_end + 1
                         )
-        for m in markers:
+        for m in kept:
             # Individual raw spans for coverage (not the aggregate bounds).
             coverage_ranges.append((m.start, m.end))
-        for m in markers:
+        for m in to_remove:
             if m in matches:
                 matches.remove(m)
 
+        if not kept:
+            return True
+
         matches.append(
             Match(
-                markers[0].start,
-                markers[-1].end,
+                kept[0].start,
+                kept[-1].end,
                 value=sections,
                 name="section_marker",
                 # Output carrier only: stripping uses the registered

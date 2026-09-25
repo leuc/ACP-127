@@ -184,11 +184,11 @@ TAGS, SUBJECT, REF), `strip` (finals removed from body), `keep`
 | `src/patterns/message_sections.py` | `message_text_marker`, `message_attributes_marker` | — | — (markers) | — |
 | `src/patterns/attributes.py` | 69 attribute key strings | `ExtendAttributeValue`, `RemoveAttributesBeforeMarker`, `MergeContinuationLines` | 160, 130, 98 | `Message Attributes` dict |
 | `src/patterns/locator.py` | — | `TagLocatorTextOnline` | 152 | — (tags only) |
-| `src/patterns/classification.py` | `classification_marker` | — | — | `_classification_marker` |
-| `src/patterns/declass_markings.py` | `marking_line` (6 strings) | — (removal in `RemoveDeclassMarkings`) | — | — (removed) |
+| `src/patterns/classification.py` | `classification_marker` (private candidate) | — | — | `_classification_marker` (aggregate list only) |
+| `src/patterns/declass_markings.py` | `marking_line` (6 strings, private) | — (removal in `RemoveDeclassMarkings`) | — | — (removed) |
 | `src/patterns/reproduction_artifacts.py` | `reproduction_artifact_marker` (private) | `RemoveReproductionArtifacts` | 2049 | — (removed) |
-| `src/patterns/page_break.py` | `page_break`, `end_marker`, `content_footer_marker` | — | — | `_page_break` |
-| `src/patterns/dash_counter.py` | `dash_counter` | `CollectDashCounters` | 32 | `_dash_counters` |
+| `src/patterns/page_break.py` | `page_break`, `end_marker`, `content_footer_marker` (all private) | — | — | `_page_break` (aggregate list only) |
+| `src/patterns/dash_counter.py` | `dash_counter` (private candidate) | `CollectDashCounters` | 32 | `_dash_counters` (structured dict only) |
 | `src/patterns/dtg.py` | `dtg` | `ParseDTG` | 32 | `_dtg` |
 | `src/patterns/distribution.py` | — | `ParseDistribution` | 32 | `_distribution` |
 | `src/patterns/from_line.py` | `from` (FM) | `ValidateFrom` | 32 | `_from` |
@@ -200,7 +200,7 @@ TAGS, SUBJECT, REF), `strip` (finals removed from body), `keep`
 | `src/patterns/subject_line.py` | — | `ParseSubject` | 31 | `_subject` |
 | `src/patterns/ref_line.py` | — | `ParseRef` | 31 | `_reference` |
 | `src/patterns/handling_restrictions.py` | `handling_restriction_marker` (private candidates) | `CollectHandlingRestrictions` | 31 | `_handling_restrictions` |
-| `src/patterns/section_marker.py` | `section_marker` | `ExtractSectionMarker` | 80 | `_section_marker` |
+| `src/patterns/section_marker.py` | `section_marker` (private candidate) | `ExtractSectionMarker` | 80 | `_section_marker` (aggregate list only) |
 | `src/rules/validate.py` | — | `ValidateSingleMessageText`, `ValidateSingleMessageAttributes` | 256 | — |
 | `src/rules/declass_removal.py` | — | `RemoveDeclassMarkings` | 200 | — |
 | `src/rules/classification_extraction.py` | — | `ExtractClassificationMarker` | 144 | `_classification_marker` |
@@ -239,9 +239,10 @@ Every extracted document produces a flat JSON object with two kinds of fields:
 | `_section_marker` | `section_marker.py` | List of `{raw, classification, section, total, mrn}` |
 
 **NOT output to JSON** (stripped/removed without output):
-- `marking_line` — declassification marking lines
-- `content_footer_marker` — `*** Current Handling Restrictions/Classification` lines
-- `end_marker` — `NNN`, `NNNN`, `NNNNMAFVVZCZ`, `<< END OF DOCUMENT >>` (`_page_break` IS output, `end_marker` is NOT)
+- `marking_line` — declassification marking lines (private; removed with coverage)
+- `content_footer_marker` — `*** Current Handling Restrictions/Classification` lines (private)
+- `end_marker` — `NNN`, `NNNN`, `NNNNMAFVVZCZ`, `<< END OF DOCUMENT >>` (private; `_page_break` IS output, `end_marker` is NOT)
+- raw `dash_counter` / `classification_marker` / `page_break` / `section_marker` pattern matches — all private candidates; only their converted finals (`_dash_counters` dict, aggregate lists) serialize. A declined conversion emits nothing, never the raw name/shape.
 
 Example output:
 ```json

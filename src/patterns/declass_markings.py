@@ -43,7 +43,13 @@ def declass_markings():
     rebulk = Rebulk()
 
     for s in _MARKING_STRINGS:
-        rebulk.string(s, name="marking_line", tags=["marking"])
+        rebulk.string(
+            s,
+            name="marking_line",
+            tags=["marking"],
+            # Removed without output; must never serialize raw.
+            private=True,
+        )
 
     return rebulk
 

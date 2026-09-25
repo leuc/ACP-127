@@ -26,6 +26,9 @@ def page_break():
         flags=re.MULTILINE | re.IGNORECASE,
         every=True,
         private_names=["page_number"],
+        # Private candidate: only the ExtractPageBreak aggregate
+        # (list of {line, page}) may serialize.
+        private=True,
     )
 
     for marker in _KNOWN_END_MARKERS:
@@ -34,12 +37,16 @@ def page_break():
             name="end_marker",
             tags=["end_marker"],
             validator=partial(chars_before, "\n"),
+            # Removed without output; must never serialize raw.
+            private=True,
         )
 
     rebulk.regex(
         r"^\*\*\* Current (?:Handling Restrictions|Classification) .*",
         name="content_footer_marker",
         tags=["content_footer"],
+        # Removed without output; must never serialize raw.
+        private=True,
     )
 
     return rebulk
