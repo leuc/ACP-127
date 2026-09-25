@@ -1,8 +1,8 @@
 """Strip page break lines and surrounding whitespace from content text.
 
 Page breaks (PAGE N lines) are extracted to JSON and removed from the
-body. The page-break line and only the directly adjacent blank lines
-are removed to merge continuous text.
+body. Empty lines before and after each page break are removed to
+merge continuous text.
 """
 
 from rebulk import Rule
@@ -13,18 +13,16 @@ from ..rules.classification_extraction import ExtractClassificationMarker
 
 
 class StripPageBreaks(Consequence):
-    """Strip page breaks + directly adjacent blank lines from text."""
+    """Strip page breaks + surrounding empty lines from text."""
 
     def then(self, matches, when_response, context):
-        text_end, attr_start, pb_matches, output_value, strip_spans = when_response
+        text_end, attr_start, pb_matches, output_value = when_response
 
         ranges = context.setdefault("_strip_ranges", [])
-        coverage_ranges = context.setdefault("_coverage_ranges", [])
-        for start, end in strip_spans:
-            ranges.append((start - text_end, end - text_end))
-        for m in pb_matches:
-            # Individual raw spans for coverage (not the aggregate bounds).
-            coverage_ranges.append((m.start, m.end))
+        for m in sorted(pb_matches, key=lambda m: m.start, reverse=True):
+            s = m.start - text_end
+            e = m.end - text_end
+            ranges.append((s, e))
 
         for old in matches.named("page_break"):
             if old in matches:
@@ -67,67 +65,12 @@ class ExtractPageBreak(Rule):
         if not pb_matches:
             return False
 
-        text = matches.input_string
         page_entries = []
-        strip_spans = []
         for m in pb_matches:
-            # Prefer the named page_number group where available; fall
-            # back to raw-text parsing instead of re-matching.
-            page_number = None
-            for child in m.children:
-                if child.name == "page_number":
-                    try:
-                        page_number = int(str(child.value).strip())
-                    except (TypeError, ValueError):
-                        page_number = None
-                    break
+            parts = m.raw.strip().split()
             entry = {"line": m.raw.strip()}
-            if page_number is not None:
-                entry["page"] = page_number
-            else:
-                parts = m.raw.strip().split()
-                if (
-                    len(parts) >= 2
-                    and parts[0].upper() == "PAGE"
-                    and parts[1].isdigit()
-                ):
-                    entry["page"] = int(parts[1])
+            if len(parts) >= 2 and parts[0].upper() == "PAGE" and parts[1].isdigit():
+                entry["page"] = int(parts[1])
             page_entries.append(entry)
-            strip_spans.append(self._strip_span(text, m.start, m.end))
 
-        return text_end, attr_start, pb_matches, page_entries, strip_spans
-
-    @staticmethod
-    def _strip_span(text, start, end):
-        """Extend a page-break span over directly adjacent blank lines only."""
-        # Walk backwards over blank lines (whitespace-only between newlines).
-        while True:
-            line_end = start
-            # step over the newline run preceding start
-            cursor = line_end - 1
-            while cursor >= 0 and text[cursor] in "\n\r":
-                cursor -= 1
-            line_start = cursor + 1
-            # find the start of that line
-            while line_start > 0 and text[line_start - 1] not in "\n\r":
-                line_start -= 1
-            if line_start >= line_end - 1:
-                break
-            if text[line_start:cursor + 1].strip():
-                break
-            start = line_start
-        # Walk forwards over blank lines.
-        while True:
-            cursor = end
-            while cursor < len(text) and text[cursor] in "\n\r":
-                cursor += 1
-            line_end = cursor
-            while line_end < len(text) and text[line_end] not in "\n\r":
-                line_end += 1
-            if line_end <= cursor:
-                end = cursor
-                break
-            if text[cursor:line_end].strip():
-                break
-            end = line_end
-        return (start, end)
+        return text_end, attr_start, pb_matches, page_entries

@@ -66,104 +66,74 @@ the position of `page_break`, `classification_marker` and `end_marker` is identi
 `section_marker` (classification + "SECTION N OF M" + mrn) is extracted but NOT yet removed
 ---
 
-content text is now free of most markers
+content text (progressively cleaned via `_content` match) is now free of most markers
 ---
-now the following header components are **independently extracted** from the cleaned content. `RemoveHeaders` strips only registered exact clean-view intervals from strip-tagged finals — never substring search, never private candidates, never an aggregate bounding span. `SUBJECT` and `REF` are keep fields: their text stays in `_message_content`, and a strip interval intersecting kept bytes is clipped with an invariant failure logged for review.
+now the following header components are **independently extracted** from the cleaned content then **all removed at once** by `RemoveHeaders`:
 ---
-distribution is parsed (via `ParseDistribution` — extracts ACTION/ORIGIN/INFO addressee codes; runs after `ValidateFrom` so the no-sum/no-dash FM fallback uses an accepted `from` match)
+distribution is parsed (via `ParseDistribution` — extracts ACTION/ORIGIN/INFO addressee codes)
 ---
-dash counter is reduced to a single structured value (via `CollectDashCounters` — `{raw, counter, filing_time, copies}`)
+dash counter is reduced to a single integer value (via `CollectDashCounters`)
 ---
-dtg is parsed (via `ParseDTG` — extracts raw components `{raw, precedence_raw, dd, hh, mm, mon, yy}`; calendar logic lives in `date_utils.py`)
+dtg is parsed (via `ParseDTG` — extracts precedence, date)
 ---
-FM from line is parsed (via `ValidateFrom` — strict `^FM[ \t]+` anchor; transmitted value preserved verbatim)
+FM from line is parsed (via `ValidateFrom`)
 ---
-TO and INFO addressee lines are parsed via one joint routing walk (see `src/patterns/routing.py::walk_routing`, used by `ParseTo` / `ParseInfo` — exact per-line intervals, alternation, label-stop window)
+TO addressee lines are parsed (via `ParseTo`)
 ---
-DRAFTED BY / APPROVED BY blocks are parsed (via `ParseDrafting` — metadata region before projected dash/FM; structural final-block fallback, never a byte window)
+INFO addressee lines are parsed (via `ParseInfo`)
 ---
-E.O. 11652 line is parsed (via `ParseExecutiveOrder` — strong numbered pattern plus positionally gated weak fallback)
+DRAFTED BY / APPROVED BY blocks are parsed (via `ParseDrafting`)
 ---
-TAGS line is parsed into raw string (via `ParseTags` — validated INFO/SUBJECT window; later restatement preferred over earlier N/A placeholder; inverted window is a diagnostic)
+E.O. 11652 line is parsed (via `ParseExecutiveOrder`)
 ---
-SUBJECT line is parsed with continuations (via `ParseSubject` — kept in body)
+TAGS line is parsed into list (via `ParseTags`)
 ---
-REF/REFS/REFERENCE lines are parsed into list (via `ParseRef` — mid-body prose guard; kept in body)
+SUBJECT line is parsed with continuations (via `ParseSubject`)
 ---
-handling restriction designators are parsed (via `CollectHandlingRestrictions` — strict cluster-window adjacency; zero-miss guardrail)
+REF/REFS/REFERENCE lines are parsed into list (via `ParseRef`)
 ---
 
 # Rule dependency chain (implemented)
 
-The extraction pipeline uses the following ordered rules, each handling ONE step.
-Ordered by data availability (descending priority); only same-priority
-dependency edges are used as execution edges:
+The extraction pipeline uses the following ordered rules, each handling ONE step:
 
 ```
 ValidateSingleMessageText (256)              [src/rules/validate.py]
   └─ ValidateSingleMessageAttributes (256)   [src/rules/validate.py]
+       └─ CollectMarkings (200)              [src/patterns/declass_markings.py]
        └─ RemoveDeclassMarkings (200)        [src/rules/declass_removal.py]
-            (single rule for marking_line + content_footer_marker outside
-             the region; in-region markers kept for BuildMessageContent;
-             all boilerplate removed when no retrievable body will be built)
 
 TagLocatorTextOnline (152)                   [src/patterns/locator.py]
-  (tolerant TEXT ON-LINE predicate shared with coverage; only a Locator
-   in the validated Message Attributes region sets eligibility)
   └─ ExtractClassificationMarker (144)       [src/rules/classification_extraction.py]
-       (exact blank adjacency to page/end structures, no byte caps;
-        only accepted marker lines stripped)
        └─ ExtractPageBreak (128)             [src/rules/page_break_extraction.py]
-            (named page_number group; strips line + adjacent blank lines)
             └─ RemoveEndMarker (112)         [src/rules/end_marker_removal.py]
                  └─ BuildMessageContent (96) [src/rules/message_content.py]
-                      (requires singleton markers + scoped TEXT ON-LINE;
-                       builds ContentView + _field_spans registry)
                       └─ RemoveHeaders (16)  [src/rules/header_removal.py]
-                           (exact registered intervals; keep-field overlap
-                            protection; single final _message_content)
 
-ExtendAttributeValue (160)                   [src/patterns/attributes.py]
-  └─ RemoveAttributesBeforeMarker (130)      [src/patterns/attributes.py]
-       └─ MergeContinuationLines (98)        [src/patterns/attributes.py]
-ExtractSectionMarker (80)                    [src/patterns/section_marker.py]
-  (per-section values + spans; aggregate is an output carrier only)
-ParseDistribution (32)                       [src/patterns/distribution.py]
-  (deps: BuildMessageContent, ValidateFrom)
 CollectDashCounters (32)                     [src/patterns/dash_counter.py]
 ParseDTG (32)                                [src/patterns/dtg.py]
+ParseDistribution (64)                       [src/patterns/distribution.py]
 ValidateFrom (32)                            [src/patterns/from_line.py]
 ParseTo (32)                                 [src/patterns/to_line.py]
 ParseInfo (32)                               [src/patterns/info_line.py]
 ParseDrafting (31)                           [src/patterns/drafting.py]
 ParseExecutiveOrder (31)                     [src/patterns/eo_line.py]
 ParseTags (31)                               [src/patterns/tags_line.py]
-  (deps set once in builder.py: FindTagsCandidates, ParseInfo, ParseSubject)
 ParseSubject (31)                            [src/patterns/subject_line.py]
 ParseRef (31)                                [src/patterns/ref_line.py]
-CollectHandlingRestrictions (31)             [src/patterns/handling_restrictions.py]
+ExtractSectionMarker (80)                    [src/patterns/section_marker.py]
 ```
 
-`BuildMessageContent` constructs the per-document `ContentView`
-(`src/content_view.py`): cleaned text + retained `(clean, raw)` segments
-plus `register_field_span()` for exact header intervals. Rules with
-priority >= 96 accumulate raw strip ranges into `context["_strip_ranges"]`
-(pre-content, original input coordinates). Rules with priority < 96
-project through the view: `Match` objects carry bounding raw spans for
-JSON/rebulk queries while `context["_field_spans"]` holds the exact clean
-intervals used for all positional comparisons and final stripping. A
-failed projection is an extraction diagnostic, never a global substring
-search. Post-content field tags: `zone:pre` (distribution, drafting,
-dash, DTG), `zone:routing` (FM, TO, INFO), `zone:cluster` (handling, EO,
-TAGS, SUBJECT, REF), `strip` (finals removed from body), `keep`
-(SUBJECT, REF), `header` (validated final header fields).
+Rules with priority >= 96 accumulate strip ranges (in original input coordinates) into `context["_strip_ranges"]`. `BuildMessageContent` merges all ranges and applies them in one pass to produce `_message_content`.
+
+Rules with priority < 96 operate on the already-extracted `_message_content` value. `RemoveHeaders` (the final rule) collects all header matches and strips their text from `_message_content` using a different mechanism: it searches for header match text within the cleaned value and removes it, leaving only the primary body text.
 
 # Attribute parsing details
 
 `attributes.py` defines 69 known keys and 3 rules:
 - **`ExtendAttributeValue` (160)** — extends `key` matches to `key: value` on same line plus indented continuation lines
-- **`RemoveAttributesBeforeMarker` (130)** — removes attribute matches appearing before `message_attributes_marker` (deps: `ExtendAttributeValue`)
-- **`MergeContinuationLines` (98)** — extends attributes to include column-0 continuation lines (non-key, non-blank) between attributes (deps: `RemoveAttributesBeforeMarker`)
+- **`RemoveAttributesBeforeMarker` (128)** — removes attribute matches appearing before `message_attributes_marker` (deps: `ExtendAttributeValue`)
+- **`MergeContinuationLines` (96)** — extends attributes to include column-0 continuation lines (non-key, non-blank) between attributes (deps: `RemoveAttributesBeforeMarker`)
 
 # Files layout
 
@@ -173,24 +143,21 @@ TAGS, SUBJECT, REF), `strip` (finals removed from body), `keep`
 - `src/extractor.py` — CLI entry point, file discovery, pipeline runner
 - `src/coverage.py` — `CoverageTracker` for byte and document coverage
 - `src/serializer.py` — `result_to_dict()` converts rebulk matches to JSON dict
-- `src/content_view.py` — `ContentView` raw-to-clean map + `register_field_span()` interval registry + tag vocabulary
-- `src/extraction_quality.py` — attribute/body completeness with evidence classes (metadata-only, later-section, candidate-rejected, true-missing) and comparable agreement
-- `src/patterns/routing.py` — joint `walk_routing()` used by `ParseTo` / `ParseInfo` (`find_routing_header()` kept for compat)
+- `src/patterns/routing.py` — shared `find_routing_header()` utility used by `ParseTo` / `ParseInfo`
 
 # All pattern/rule source files
 
 | File | Pattern Name(s) | Rule(s) | Priority | Output field |
 |---|---|---|---|---|
 | `src/patterns/message_sections.py` | `message_text_marker`, `message_attributes_marker` | — | — (markers) | — |
-| `src/patterns/attributes.py` | 69 attribute key strings | `ExtendAttributeValue`, `RemoveAttributesBeforeMarker`, `MergeContinuationLines` | 160, 130, 98 | `Message Attributes` dict |
+| `src/patterns/attributes.py` | 69 attribute key strings | `ExtendAttributeValue`, `RemoveAttributesBeforeMarker`, `MergeContinuationLines` | 160, 128, 96 | `Message Attributes` dict |
 | `src/patterns/locator.py` | — | `TagLocatorTextOnline` | 152 | — (tags only) |
 | `src/patterns/classification.py` | `classification_marker` | — | — | `_classification_marker` |
-| `src/patterns/declass_markings.py` | `marking_line` (6 strings) | — (removal in `RemoveDeclassMarkings`) | — | — (removed) |
-| `src/patterns/reproduction_artifacts.py` | `reproduction_artifact_marker` (private) | `RemoveReproductionArtifacts` | 2049 | — (removed) |
+| `src/patterns/declass_markings.py` | `marking_line` (6 strings) | `CollectMarkings` | 200 | — (removed) |
 | `src/patterns/page_break.py` | `page_break`, `end_marker`, `content_footer_marker` | — | — | `_page_break` |
 | `src/patterns/dash_counter.py` | `dash_counter` | `CollectDashCounters` | 32 | `_dash_counters` |
 | `src/patterns/dtg.py` | `dtg` | `ParseDTG` | 32 | `_dtg` |
-| `src/patterns/distribution.py` | — | `ParseDistribution` | 32 | `_distribution` |
+| `src/patterns/distribution.py` | — | `ParseDistribution` | 64 | `_distribution` |
 | `src/patterns/from_line.py` | `from` (FM) | `ValidateFrom` | 32 | `_from` |
 | `src/patterns/to_line.py` | — | `ParseTo` | 32 | `_to` |
 | `src/patterns/info_line.py` | — | `ParseInfo` | 32 | `_info` |
@@ -199,7 +166,6 @@ TAGS, SUBJECT, REF), `strip` (finals removed from body), `keep`
 | `src/patterns/tags_line.py` | — | `ParseTags` | 31 | `_tags` |
 | `src/patterns/subject_line.py` | — | `ParseSubject` | 31 | `_subject` |
 | `src/patterns/ref_line.py` | — | `ParseRef` | 31 | `_reference` |
-| `src/patterns/handling_restrictions.py` | `handling_restriction_marker` (private candidates) | `CollectHandlingRestrictions` | 31 | `_handling_restrictions` |
 | `src/patterns/section_marker.py` | `section_marker` | `ExtractSectionMarker` | 80 | `_section_marker` |
 | `src/rules/validate.py` | — | `ValidateSingleMessageText`, `ValidateSingleMessageAttributes` | 256 | — |
 | `src/rules/declass_removal.py` | — | `RemoveDeclassMarkings` | 200 | — |
@@ -223,7 +189,7 @@ Every extracted document produces a flat JSON object with two kinds of fields:
 | `_message_content` | `message_content.py` | Cleaned body text with all markers/headers stripped |
 | `_classification_marker` | `classification_extraction.py` | List of unique classification strings (near page breaks) |
 | `_page_break` | `page_break_extraction.py` | List of `{line, page}` entries |
-| `_dash_counters` | `dash_counter.py` | Dict `{raw, counter, filing_time, copies}` — counter is the station serial number, filing_time the `Z`-tagged group |
+| `_dash_counters` | `dash_counter.py` | Integer from dash counter line |
 | `_dtg` | `dtg.py` | Raw components dict `{raw, precedence_raw, dd, hh, mm, mon, yy}` — **not parsed**; rebulk only extracts, calendar parsing happens downstream in `src/date_utils.py::parse_dtg` (see `src/date_normalize.py`) |
 | `_distribution` | `distribution.py` | Dict `{raw, ACTION: {CODE: count, ...}, ORIGIN, INFO, _sum_check}` |
 | `_from` | `from_line.py` | Originator string (FM line body) |
@@ -235,7 +201,6 @@ Every extracted document produces a flat JSON object with two kinds of fields:
 | `_tags` | `tags_line.py` | Raw TAGS line text (string, unsplit) |
 | `_subject` | `subject_line.py` | Subject text (joined) |
 | `_reference` | `ref_line.py` | List of reference strings |
-| `_handling_restrictions` | `handling_restrictions.py` | Ordered list of designator strings (e.g. `EXDIS`, `NOFORN`) |
 | `_section_marker` | `section_marker.py` | List of `{raw, classification, section, total, mrn}` |
 
 **NOT output to JSON** (stripped/removed without output):
@@ -246,7 +211,7 @@ Every extracted document produces a flat JSON object with two kinds of fields:
 Example output:
 ```json
 {
-  "_file": "cables/us-diplomatic-cables-txt-1973/04/1973LIMA02545.txt",
+  "_file": "cables/1973/04/1973LIMA02545.txt",
   "_message_content": "...",
   "Message Attributes": {
     "Automatic Decaptioning": "X",

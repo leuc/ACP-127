@@ -13,7 +13,25 @@ from rebulk.match import Match
 from rebulk.remodule import re
 
 from ..rules.message_content import BuildMessageContent
-from .classification import _CLASSIFICATIONS, spaced_alternation
+
+_CLASSIFICATIONS = [
+    "UNCLAS",
+    "UNCLASSIFIED",
+    "LIMITED OFFICIAL USE",
+    "CONFIDENTIAL",
+    "SECRET",
+    "TOP SECRET",
+]
+
+
+def _spaced_alternation():
+    """Build alternation pattern for classifications with spaced-out letters."""
+    parts = []
+    for cls in _CLASSIFICATIONS:
+        words = cls.split()
+        spaced_words = [" ".join(word) for word in words]
+        parts.append(r"\s+".join(spaced_words))
+    return "|".join(parts)
 
 
 def section_marker():
@@ -23,7 +41,7 @@ def section_marker():
     rebulk.regex(
         r"(?P<before_nl>\n{,3})^"
         r"(?:(?P<classification>" + "|".join(_CLASSIFICATIONS) + r")"
-        r"|(?:" + spaced_alternation() + r"))"
+        r"|(?:" + _spaced_alternation() + r"))"
         r"\s+SECTION\s+(?P<section_number>\d+)\s+OF\s+(?P<section_total>\d+)\s+"
         r"(?P<section_id>.+)$"
         r"(?P<after_nl>\n{,2})",
@@ -57,21 +75,16 @@ class ExtractSectionMarker(Rule):
     dependency = BuildMessageContent
 
     def when(self, matches, context):
-        from ..content_view import content_region, get_view
-
         mc = matches.named("message_content")
-        view = get_view(context)
-        region = content_region(matches)
-        if not mc or view is None or region is None:
+        if not mc:
             return False
 
-        mc_text = view.text
-        text_end, attr_start = region
+        mc_text = mc[0].value
+        mc_start = mc[0].start
+        mc_end = mc[0].end
 
         markers = [
-            m
-            for m in matches.named("section_marker")
-            if text_end <= m.start < attr_start
+            m for m in matches.named("section_marker") if mc_start <= m.start < mc_end
         ]
         if not markers:
             return False
@@ -94,32 +107,7 @@ class ExtractSectionMarker(Rule):
         return markers, sections
 
     def then(self, matches, when_response, context):
-        from ..content_view import (
-            TAG_HEADER,
-            TAG_STRIP,
-            ZONE_ROUTING,
-            get_view,
-            register_field_span,
-        )
-
         markers, sections = when_response
-        view = get_view(context)
-        coverage_ranges = context.setdefault("_coverage_ranges", [])
-        if view is not None:
-            # Register one exact interval per actual section line --
-            # never the bounding span of the aggregate output carrier.
-            for m in markers:
-                clean_start = view.raw_to_clean(m.start)
-                clean_end = view.raw_to_clean(m.end - 1)
-                if clean_start is not None and clean_end is not None:
-                    segments = view.clean_to_raw(clean_start, clean_end + 1)
-                    if segments == [(m.start, m.end)]:
-                        register_field_span(
-                            context, "section_marker", clean_start, clean_end + 1
-                        )
-        for m in markers:
-            # Individual raw spans for coverage (not the aggregate bounds).
-            coverage_ranges.append((m.start, m.end))
         for m in markers:
             if m in matches:
                 matches.remove(m)
@@ -130,8 +118,6 @@ class ExtractSectionMarker(Rule):
                 markers[-1].end,
                 value=sections,
                 name="section_marker",
-                # Output carrier only: stripping uses the registered
-                # per-section intervals, never this bounding span.
-                tags=["message_content", ZONE_ROUTING, TAG_STRIP, TAG_HEADER],
+                tags=["message_content"],
             )
         )

@@ -32,8 +32,6 @@ Stripped from message_content after extraction.
 from rebulk import Rebulk, Rule
 from rebulk.remodule import re
 
-from ..content_view import TAG_HEADER, TAG_STRIP, ZONE_PRE
-
 _MONTH_FULL = {
     "JAN": "JANUARY", "FEB": "FEBRUARY", "MAR": "MARCH", "APR": "APRIL",
     "MAY": "MAY", "JUN": "JUNE", "JUL": "JULY", "AUG": "AUGUST",
@@ -120,8 +118,6 @@ class ParseDTG(Rule):
     priority = 32
 
     def when(self, matches, context):
-        from ..content_view import content_region, get_view
-
         text_ms = matches.markers.named("message_text_marker")
         attr_ms = matches.markers.named("message_attributes_marker")
         if len(text_ms) != 1 or len(attr_ms) != 1:
@@ -129,29 +125,6 @@ class ParseDTG(Rule):
 
         region_start = text_ms[0].end
         region_end = attr_ms[0].start
-
-        view = get_view(context)
-        if view is not None:
-            # Project through the content view: register exact clean
-            # intervals for stripping; matches crossing removed spans are
-            # left in place (diagnostic) but not registered.
-            from ..content_view import register_field_span
-
-            for m in matches.named("dtg"):
-                if not (region_start <= m.start < region_end):
-                    continue
-                clean_start = view.raw_to_clean(m.start)
-                clean_end = view.raw_to_clean(m.end - 1)
-                if clean_start is not None and clean_end is not None:
-                    segments = view.clean_to_raw(clean_start, clean_end + 1)
-                    if segments == [(m.start, m.end)]:
-                        register_field_span(
-                            context, "dtg", clean_start, clean_end + 1
-                        )
-                    if ZONE_PRE not in (m.tags or []):
-                        m.tags.extend(
-                            ["message_content", ZONE_PRE, TAG_STRIP, TAG_HEADER]
-                        )
 
         return [
             m for m in matches.named("dtg") if not (region_start <= m.start < region_end)

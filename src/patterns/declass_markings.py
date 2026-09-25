@@ -32,31 +32,42 @@ class RemoveMatchesWithCoverage(Consequence):
 
 
 def declass_markings():
-    """Build pattern that matches declassification marking lines.
-
-    Removal of outside-region markings (both ``marking_line`` and
-    ``content_footer_marker``) lives in exactly one rule --
-    ``src/rules/declass_removal.py::RemoveDeclassMarkings`` -- so the two
-    overlapping removers cannot drift apart. In-region markers are left
-    for ``BuildMessageContent``.
-    """
+    """Build pattern that matches declassification marking lines."""
     rebulk = Rebulk()
 
     for s in _MARKING_STRINGS:
         rebulk.string(s, name="marking_line", tags=["marking"])
 
+    rebulk.rules(CollectMarkings)
+
     return rebulk
 
 
-# Backwards-compatible alias: removal now happens only in
-# ``rules.declass_removal.RemoveDeclassMarkings``. Kept so existing
-# imports do not break; no longer registered as a rule.
 class CollectMarkings(Rule):
-    """Deprecated -- see RemoveDeclassMarkings (not registered)."""
+    """Remove marking lines that fall outside the validated content region.
+
+    Runs after ValidateSingleMessageAttributes to ensure the content
+    region boundaries are known.  Remaining marking lines within the
+    region are handled by FinalizeMessageContent.
+    """
 
     priority = 200
     dependency = ValidateSingleMessageAttributes
     consequence = RemoveMatchesWithCoverage()
 
     def when(self, matches, context):
-        return False
+        text_ms = matches.markers.named("message_text_marker")
+        attr_ms = matches.markers.named("message_attributes_marker")
+
+        if len(text_ms) != 1 or len(attr_ms) != 1:
+            return list(matches.named("marking_line"))
+
+        region_start = text_ms[0].end
+        region_end = attr_ms[0].start
+
+        to_remove = []
+        for m in matches.named("marking_line"):
+            if m.start < region_start or m.start >= region_end:
+                to_remove.append(m)
+
+        return to_remove if to_remove else False

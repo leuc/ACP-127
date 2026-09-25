@@ -1,18 +1,28 @@
 """Finalize message content by stripping remaining markers.
 
-Reads all accumulated strip ranges from context, merges them, and applies
-to the original input to produce clean message_content. Also builds the
-per-document :class:`ContentView <src.content_view.ContentView>` that maps
-cleaned offsets back to exact raw source positions for all later parsers.
+Reads all accumulated strip ranges from context, merges them,
+and applies to the original input to produce clean message_content.
 """
 
 from rebulk import Rule
 from rebulk.match import Match
 from rebulk.rules import Consequence
 
-from ..content_view import ContentView, content_region, get_field_spans
-from ..patterns.locator import is_text_online
 from ..rules.end_marker_removal import RemoveEndMarker
+
+
+def _merge_ranges(ranges):
+    """Sort and merge overlapping/adjacent ranges."""
+    if not ranges:
+        return []
+    sorted_ranges = sorted(ranges, key=lambda r: r[0])
+    merged = [list(sorted_ranges[0])]
+    for start, end in sorted_ranges[1:]:
+        if start <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    return [(s, e) for s, e in merged]
 
 
 def _strip_ranges_from_text(text, ranges):
@@ -31,7 +41,7 @@ def _strip_ranges_from_text(text, ranges):
 
 
 class FinalizeMessageContent(Consequence):
-    """Strip remaining markers, build message_content + content view."""
+    """Strip remaining markers, build message_content."""
 
     def then(self, matches, when_response, context):
         text_end, attr_start, remaining_matches = when_response
@@ -69,16 +79,8 @@ class FinalizeMessageContent(Consequence):
                     end += 1
                 ranges.append((start, end))
 
-        view, merged = ContentView.build(raw, text_end, ranges)
-        cleaned = view.text
-        context["_content_view"] = view
-        # Fresh per-document registries for this run (rebulk reuses the
-        # same context dict only within one matches() call, but be explicit).
-        context["_field_spans"] = {}
-        get_field_spans(context)  # ensure key exists
-        context["_strip_merged"] = [
-            (start + text_end, end + text_end) for start, end in merged
-        ]
+        merged = _merge_ranges(ranges)
+        cleaned = _strip_ranges_from_text(raw, merged)
 
         for m in remaining_matches:
             if m in matches:
@@ -109,11 +111,6 @@ class BuildMessageContent(Rule):
     """Build the final message_content from the cleaned _content.
 
     Runs after RemoveEndMarker — all markers have been removed.
-
-    Body extraction requires exactly one valid marker pair in the proper
-    order plus a scoped Locator with a TEXT ON-LINE form (tolerant
-    predicate shared with coverage.has_retrievable_body). Attribute
-    extraction continues regardless -- this gate only controls the body.
     """
 
     priority = 96
@@ -121,37 +118,11 @@ class BuildMessageContent(Rule):
     consequence = FinalizeMessageContent()
 
     def when(self, matches, context):
-        region = content_region(matches)
-        if region is None:
-            context.setdefault("_validation", {})["body_eligible"] = {
-                "eligible": False,
-                "reason": "markers",
-            }
+        text_ms = matches.markers.named("message_text_marker")
+        attr_ms = matches.markers.named("message_attributes_marker")
+        if len(text_ms) != 1 or len(attr_ms) != 1:
             return False
-        text_end, attr_start = region
-
-        eligible = any(
-            is_text_online(m.value) and m.start >= attr_start
-            for m in matches.named("Locator")
-        )
-        # Fallback for attribute matches whose value extension has not yet
-        # run at this priority: check the raw Locator line text directly.
-        if not eligible:
-            text = matches.input_string
-            for m in matches.named("Locator"):
-                if m.start < attr_start:
-                    continue
-                line_end = text.find("\n", m.start)
-                line = text[m.start : line_end if line_end >= 0 else len(text)]
-                if is_text_online(line):
-                    eligible = True
-                    break
-        context.setdefault("_validation", {})["body_eligible"] = {
-            "eligible": bool(eligible),
-            "reason": "ok" if eligible else "locator",
-        }
-        if not eligible:
-            return False
+        text_end, attr_start = text_ms[0].end, attr_ms[0].start
 
         names = ["content_footer_marker", "marking_line"]
         remaining = [

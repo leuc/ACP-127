@@ -27,23 +27,14 @@ _CLASSIFICATIONS = [
 ]
 
 
-def spaced_alternation(classifications=None):
-    """Build alternation pattern for classifications with spaced-out letters.
-
-    Shared by ``section_marker.py`` -- both modules must tolerate the same
-    NARA reproduction-noise pattern of injected whitespace mid-token.
-    """
+def _spaced_alternation():
+    """Build alternation pattern for classifications with spaced-out letters."""
     parts = []
-    for cls in classifications or _CLASSIFICATIONS:
+    for cls in _CLASSIFICATIONS:
         words = cls.split()
         spaced_words = [" ".join(word) for word in words]
         parts.append(r"\s+".join(spaced_words))
     return "|".join(parts)
-
-
-def _spaced_alternation():
-    """Backwards-compatible alias for the shared helper."""
-    return spaced_alternation()
 
 
 _CLASS_ALT = "(?:" + "|".join(_CLASSIFICATIONS) + "|" + _spaced_alternation() + r")"

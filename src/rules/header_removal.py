@@ -1,107 +1,146 @@
 """Strip extracted header fields from message_content.
 
 Runs as the final cleaning step after all extraction is complete.
-Gathers only registered clean intervals from final strip-tagged fields
-and applies a single merged reverse-order removal to the content view.
-Never calls find() on a field value or Match.raw; never removes private
-candidates or the bounding span of an aggregate. SUBJECT and REF are
-keep fields: a validated kept field protects its exact bytes, and a
-strip interval intersecting it logs an invariant failure for review
-instead of deleting kept text.
+Selects existing header matches (distribution, dtg, from, to, info,
+drafted_by, approved_by, etc.) within the message content region and
+removes their text from _message_content.
+
+Header matches use two coordinate systems:
+  - dtg, from: original raw-text coordinates (regex matches on full input)
+  - distribution, to, info, etc.: cleaned-text coordinates (parsed from
+    the message_content value)
+
+For original-coord matches, the raw text is searched for within the
+cleaned message_content value.  All instances per field are stripped —
+section markers cause some headers (DTG, FM) to appear twice.
+
+Note: ``reference`` and ``subject`` matches are NOT stripped from
+_message_content — they are preserved in the body output.
 """
 
 from rebulk import Rule
 from rebulk.match import Match
 from rebulk.rules import Consequence
 
-from ..content_view import get_field_spans, get_view
 from ..rules.message_content import BuildMessageContent
 
-# Final strip-tagged fields removed from the body. SUBJECT and REF are
-# keep fields and are never stripped. Aggregate output carriers
-# (section_marker, handling_restrictions, distribution) contribute their
-# registered per-line intervals, never their bounding Match span.
-_STRIP_FIELDS = frozenset(
-    {
-        "distribution",
-        "dtg",
-        "from",
-        "to",
-        "info",
-        "drafted_by",
-        "approved_by",
-        "handling_restrictions",
-        "executive_order",
-        "tags",
-        "section_marker",
-        "dash_counters",
-    }
-)
+_HEADER_NAMES = {
+    "distribution",
+    "dtg",
+    "from",
+    "to",
+    "section_marker",
+    "dash_counters",
+    "info",
+    "drafted_by",
+    "approved_by",
+    "handling_restriction_marker",
+    "executive_order",
+    "tags",
+}
+_ORIGINAL_COORDS = {"dtg", "from"}
+_CLEANED_COORDS = {
+    "distribution",
+    "to",
+    "info",
+    "drafted_by",
+    "approved_by",
+    "handling_restriction_marker",
+    "executive_order",
+    "tags",
+}
 
-_KEEP_FIELDS = frozenset({"subject", "reference"})
 
+def _find_ranges(mc_value, text_end, header_matches, input_string):
+    """Compute strip ranges within the cleaned message_content value.
 
-def _merged_spans(spans):
-    """Sort and merge overlapping/adjacent clean intervals."""
-    if not spans:
-        return []
-    ordered = sorted(spans, key=lambda span: span[0])
-    merged = [list(ordered[0])]
-    for start, end in ordered[1:]:
-        if start <= merged[-1][1]:
-            merged[-1][1] = max(merged[-1][1], end)
-        else:
-            merged.append([start, end])
-    return [(start, end) for start, end in merged]
+    For cleaned-coord matches the position is directly available via
+    match.start - text_end.  For original-coord matches (dtg, from)
+    the match's raw text is searched for in the cleaned value.
+
+    Section markers and dash counters use their match value or raw
+    text to locate all occurrences within the cleaned text.
+    """
+    ranges = []
+    for m in header_matches:
+        name = m.name
+        if name in _CLEANED_COORDS:
+            c_start = m.start - text_end
+            c_end = m.end - text_end
+            c_start = max(0, c_start)
+            c_end = min(len(mc_value), c_end)
+            if c_start < c_end:
+                ranges.append((name, c_start, c_end))
+        elif name == "section_marker":
+            sections = m.value
+            if not isinstance(sections, list):
+                continue
+            for entry in sections:
+                raw_text = entry.get("raw", "")
+                if not raw_text.strip():
+                    continue
+                start_search = 0
+                while True:
+                    pos = mc_value.find(raw_text, start_search)
+                    if pos < 0:
+                        break
+                    ranges.append((name, pos, pos + len(raw_text)))
+                    start_search = pos + 1
+        elif name == "dash_counters":
+            raw_text = m.raw
+            if raw_text is None:
+                raw_text = input_string[m.start : m.end]
+            raw_text = raw_text.strip()
+            if not raw_text:
+                continue
+            start_search = 0
+            while True:
+                pos = mc_value.find(raw_text, start_search)
+                if pos < 0:
+                    break
+                ranges.append((name, pos, pos + len(raw_text)))
+                start_search = pos + 1
+        elif name in _ORIGINAL_COORDS:
+            raw_text = m.raw.strip()
+            if not raw_text:
+                continue
+            start_search = 0
+            while True:
+                pos = mc_value.find(raw_text, start_search)
+                if pos < 0:
+                    break
+                ranges.append((name, pos, pos + len(raw_text)))
+                start_search = pos + 1
+    return ranges
 
 
 class StripHeaders(Consequence):
-    """Strip registered header intervals from the content view text."""
+    """Strip header fields from the current message_content value."""
 
     def then(self, matches, when_response, context):
-        text_end, attr_start, strip_spans, keep_spans = when_response
+        text_end, attr_start, header_matches = when_response
         mc = matches.named("message_content")
         if not mc:
             return True
         current_value = mc[0].value
-        view = get_view(context)
-        if view is not None and view.text != current_value:
-            # A rule mutated message_content after the view was built;
-            # re-anchor on the view text (the positional authority).
-            current_value = view.text
 
-        merged_strip = _merged_spans(strip_spans)
-        merged_keep = _merged_spans(keep_spans)
+        to_strip = _find_ranges(
+            current_value, text_end, header_matches, matches.input_string
+        )
+        if not to_strip:
+            return True
 
-        # Overlap precedence: a validated kept field protects its exact
-        # bytes. Intersecting strip intervals are clipped (not deleted
-        # through the kept range); the invariant failure is logged.
-        effective = []
-        for strip_start, strip_end in merged_strip:
-            cursor = strip_start
-            for keep_start, keep_end in merged_keep:
-                if keep_end <= cursor or keep_start >= strip_end:
-                    continue
-                context.setdefault("_invariant_failures", []).append(
-                    {
-                        "type": "strip_keep_overlap",
-                        "strip": [strip_start, strip_end],
-                        "keep": [keep_start, keep_end],
-                    }
-                )
-                if keep_start > cursor:
-                    effective.append((cursor, keep_start))
-                cursor = max(cursor, keep_end)
-            if cursor < strip_end:
-                effective.append((cursor, strip_end))
-        effective = _merged_spans(effective)
+        to_strip.sort(key=lambda x: x[1])
+        merged = []
+        for _, s, e in to_strip:
+            if merged and s <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], e))
+            else:
+                merged.append((s, e))
 
         cleaned = current_value
-        for start, end in reversed(effective):
-            start = max(0, start)
-            end = min(len(cleaned), end)
-            if start < end:
-                cleaned = cleaned[:start] + cleaned[end:]
+        for s, e in reversed(merged):
+            cleaned = cleaned[:s] + cleaned[e:]
 
         for old in matches.named("message_content"):
             if old in matches:
@@ -123,9 +162,11 @@ class RemoveHeaders(Rule):
     """Remove extracted header fields from message_content.
 
     Strips distribution, dtg, from, to, info, drafted_by, approved_by,
-    section_marker, dash_counters, handling_restrictions, executive_order
-    and tags using their registered clean intervals. Reference and
-    subject are NOT stripped.
+    section_marker, dash_counters, etc. from _message_content after all
+    extraction is complete.  reference and subject are NOT stripped.
+
+    When section markers exist, headers that appear in each section
+    (DTG, FM) are all stripped.
     """
 
     priority = 16
@@ -133,45 +174,21 @@ class RemoveHeaders(Rule):
     consequence = StripHeaders()
 
     def when(self, matches, context):
-        from ..content_view import content_region
-
-        region = content_region(matches)
-        if region is None:
+        text_ms = matches.markers.named("message_text_marker")
+        attr_ms = matches.markers.named("message_attributes_marker")
+        if len(text_ms) != 1 or len(attr_ms) != 1:
             return False
-        text_end, attr_start = region
-        mc = matches.named("message_content")
-        if not mc:
-            return False
+        text_end, attr_start = text_ms[0].end, attr_ms[0].start
 
-        spans = get_field_spans(context)
-        strip_spans = []
-        for field in _STRIP_FIELDS:
-            strip_spans.extend(spans.get(field, ()))
-        if not strip_spans:
-            return False
+        header_matches = []
+        for name in _HEADER_NAMES:
+            for m in matches.named(name):
+                if name == "handling_restriction_marker" and "header" not in m.tags:
+                    continue
+                if text_end <= m.start < attr_start:
+                    header_matches.append(m)
 
-        view = get_view(context)
-        view_len = len(view.text) if view is not None else len(mc[0].value)
-        validated_strip = [
-            (start, end)
-            for start, end in strip_spans
-            if 0 <= start < end <= view_len
-        ]
-        if not validated_strip:
+        if not header_matches:
             return False
 
-        keep_spans = []
-        for field in _KEEP_FIELDS:
-            keep_spans.extend(spans.get(field, ()))
-        # Keep spans are also recoverable from final keep matches when a
-        # rule did not register them (SUBJECT/REF register nothing by
-        # design today): project their raw bounds back to clean.
-        if view is not None:
-            for name in ("subject", "reference"):
-                for m in matches.named(name):
-                    clean_start = view.raw_to_clean(m.start)
-                    clean_end = view.raw_to_clean(m.end - 1)
-                    if clean_start is not None and clean_end is not None:
-                        keep_spans.append((clean_start, clean_end + 1))
-
-        return text_end, attr_start, validated_strip, keep_spans
+        return text_end, attr_start, header_matches

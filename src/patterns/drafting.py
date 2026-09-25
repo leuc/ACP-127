@@ -13,13 +13,6 @@ from rebulk import Rebulk, Rule
 from rebulk.match import Match
 from rebulk.remodule import re
 
-from ..content_view import (
-    TAG_HEADER,
-    TAG_STRIP,
-    ZONE_PRE,
-    get_view,
-    register_field_span,
-)
 from ..rules.message_content import BuildMessageContent
 from .dash_counter import CollectDashCounters
 from .from_line import ValidateFrom
@@ -45,49 +38,37 @@ _END_PAT = re.compile(
     + r"|DESIRED DIST(?:RIBUTION|B)|DISTRIBUTION)\b",
     re.MULTILINE | re.IGNORECASE,
 )
+_MAX_FOOTER_DISTANCE = 512
 
 
 class ParseDrafting(Rule):
     """Parse DRAFTED BY and APPROVED BY blocks from the metadata region.
 
-    The metadata region is bounded below by the projected dash counter
-    line (or FM line if no dash counter). Only lines within this region
-    are considered — this avoids false positives from body text. The
-    structural final-section fallback is bounded by a section/page break
-    or the last blank-line block -- never a fixed byte window. A fallback
-    DRAFTED BY still needs a complete header line and nearby APPROVED BY
-    or metadata evidence.
+    The metadata region is bounded below by the dash counter line
+    (or FM line if no dash counter). Only lines within this region
+    are considered — this avoids false positives from body text.
     """
 
     priority = 31
     dependency = (BuildMessageContent, CollectDashCounters, ValidateFrom)
 
     @staticmethod
-    def _metadata_end(mc_text, matches, view):
-        """Return the clean offset bounding the metadata region."""
+    def _find_metadata_region(mc_text, matches):
+        """Return the region before existing dash-counter/from matches."""
         boundaries = []
         for name in ("dash_counters", "from"):
             for match in matches.named(name):
-                clean = view.raw_to_clean(match.start)
-                if clean is not None:
-                    boundaries.append(clean)
-        if boundaries:
-            return min(boundaries)
-        return len(mc_text)
-
-    @staticmethod
-    def _structural_footer_start(mc_text, metadata_end):
-        """Return the start of the last blank-line-delimited block.
-
-        Used only for the fallback DRAFTED BY search: bounds the scan to
-        the final structural block instead of an arbitrary byte window.
-        """
-        head = mc_text[:metadata_end]
-        blocks = re.split(r"\n[ \t]*\n", head)
-        if not blocks:
-            return 0
-        last = blocks[-1]
-        return metadata_end - len(last)
+                if name == "dash_counters" and isinstance(match.value, dict):
+                    raw = match.value.get("raw")
+                else:
+                    raw = match.raw
+                if not raw:
+                    continue
+                position = mc_text.find(raw)
+                if position >= 0:
+                    boundaries.append(position)
+        end = min(boundaries) if boundaries else len(mc_text)
+        return mc_text[:end], 0
 
     @staticmethod
     def _collect_section(region_text, header_prefix):
@@ -128,13 +109,12 @@ class ParseDrafting(Rule):
 
     def when(self, matches, context):
         mc = matches.named("message_content")
-        view = get_view(context)
-        if not mc or view is None:
+        if not mc:
             return False
 
-        mc_text = view.text
-        metadata_end = self._metadata_end(mc_text, matches, view)
-        region = mc_text[:metadata_end]
+        mc_text = mc[0].value
+        mc_start = mc[0].start
+        region, base = self._find_metadata_region(mc_text, matches)
 
         db_items, db_start, db_end = self._collect_section(
             region, _DRAFTED_HEADER
@@ -144,41 +124,34 @@ class ParseDrafting(Rule):
         )
 
         if not db_items:
-            footer_start = self._structural_footer_start(mc_text, metadata_end)
-            footer = mc_text[footer_start:metadata_end]
-            items, start, end = self._collect_section(
+            footer_start = max(0, len(mc_text) - _MAX_FOOTER_DISTANCE)
+            footer = mc_text[footer_start:]
+            db_items, db_start, db_end = self._collect_section(
                 footer, _CANONICAL_DRAFTED_HEADER
             )
-            # Fallback needs nearby APPROVED BY/metadata evidence, not
-            # arbitrary prose: require an APPROVED header in the same
-            # structural block.
-            if items:
-                _ab, _, _ = self._collect_section(footer, _APPROVED_HEADER)
-                if _ab:
-                    db_items, db_start, db_end = (
-                        items,
-                        start + footer_start,
-                        end + footer_start,
-                    )
+            if db_items:
+                db_start += footer_start
+                db_end += footer_start
 
         results = []
-        for items, start, end, name in (
-            (db_items, db_start, db_end, "drafted_by"),
-            (ab_items, ab_start, ab_end, "approved_by"),
-        ):
-            if not items:
-                continue
-            bounding = view.clean_to_raw_bounding(start, end)
-            if bounding is None:
-                continue
-            register_field_span(context, name, start, end)
+        if db_items:
             results.append(
                 Match(
-                    bounding[0],
-                    bounding[1],
-                    value=items,
-                    name=name,
-                    tags=["message_content", ZONE_PRE, TAG_STRIP, TAG_HEADER],
+                    mc_start + base + db_start,
+                    mc_start + base + db_end,
+                    value=db_items,
+                    name="drafted_by",
+                    tags=["message_content"],
+                )
+            )
+        if ab_items:
+            results.append(
+                Match(
+                    mc_start + base + ab_start,
+                    mc_start + base + ab_end,
+                    value=ab_items,
+                    name="approved_by",
+                    tags=["message_content"],
                 )
             )
 

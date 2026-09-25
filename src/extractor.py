@@ -5,8 +5,6 @@ try:
 except ImportError:
     import json
 
-import datetime
-import io
 import os
 import sys
 import random
@@ -22,35 +20,36 @@ from .coverage import (
 )
 from .serializer import result_to_dict
 
-# One process-local cached provider for both extract_from_text (in-process
-# callers: tests/REPL) and process_file (forked ProcessPoolExecutor
-# workers inherit the parent's instance; spawn workers build their own on
-# first use). Never construct one Rebulk per file.
-_REBULK = None
-
-
-def _get_rebulk():
-    global _REBULK
-    if _REBULK is None:
-        _REBULK = build_rebulk()
-    return _REBULK
+# Two singletons (not one) by design: ``process_file`` runs in forked
+# ProcessPoolExecutor workers, so a parent-process instance cannot be shared.
+# ``extract_from_text`` serves in-process callers (tests/REPL).
+_REBULK_INSTANCE = None
 
 
 def extract_from_text(text, context=None):
-    matches = _get_rebulk().matches(text, context=context or {})
+    global _REBULK_INSTANCE
+    if _REBULK_INSTANCE is None:
+        _REBULK_INSTANCE = build_rebulk()
+    matches = _REBULK_INSTANCE.matches(text, context=context or {})
     return matches
+
+
+_WORKER_REBULK = None
 
 
 def process_file(filepath):
     """Worker function: parses a single file and returns (json_str, coverage_dict)."""
-    rebulk = _get_rebulk()
+    global _WORKER_REBULK
+
+    if _WORKER_REBULK is None:
+        _WORKER_REBULK = build_rebulk()
 
     try:
         with open(filepath, "r", encoding="utf-8", errors="replace") as f:
             text = f.read()
 
         context = {}
-        matches = rebulk.matches(text, context=context)
+        matches = _WORKER_REBULK.matches(text, context=context)
 
         byte_stats = calculate_coverage(
             text, matches, context.get("_coverage_ranges", ())
@@ -104,26 +103,6 @@ def _discover_files(paths):
             sys.stderr.write(f"WARNING: {path} is not a file or directory, skipping\n")
 
 
-def _write_dated_coverage_report(tracker):
-    """Store the plaintext coverage summary under results/coverage/.
-
-    Date-based filename per project convention; never fails the run.
-    """
-    try:
-        buffer = io.StringIO()
-        tracker.print_report(stream=buffer)
-        report = buffer.getvalue()
-        directory = os.path.join("results", "coverage")
-        os.makedirs(directory, exist_ok=True)
-        filename = "extraction-{}.txt".format(
-            datetime.date.today().strftime("%Y%m%d")
-        )
-        with open(os.path.join(directory, filename), "w", encoding="utf-8") as f:
-            f.write(report)
-    except OSError as e:
-        sys.stderr.write(f"WARNING: could not write coverage report: {e}\n")
-
-
 def main():
     import argparse
 
@@ -139,23 +118,16 @@ def main():
         "--limit",
         type=int,
         default=None,
-        help="Limit number of files to process (applied after --sample; "
-        "must be >= 0)",
+        help="Limit number of files to process",
     )
     parser.add_argument(
         "--sample",
         type=int,
         default=None,
-        help="Randomly sample N files with seed 0 (applied before --limit; "
-        "must be >= 0)",
+        help="Randomly sample N files (applied before --limit)",
     )
 
     args = parser.parse_args()
-
-    if args.limit is not None and args.limit < 0:
-        parser.error("--limit must be >= 0")
-    if args.sample is not None and args.sample < 0:
-        parser.error("--sample must be >= 0")
 
     all_files = list(_discover_files(args.inputs))
     if not all_files:
@@ -189,16 +161,44 @@ def main():
                 continue
 
             if coverage:
-                tracker.record_summary(coverage)
+                tracker.total_documents += coverage["total_documents"]
+                tracker.matched_documents += coverage["matched_documents"]
+                tracker.total_bytes += coverage["total_bytes"]
+                tracker.matched_bytes += coverage["matched_bytes"]
+                # Old workers emit only "matched_bytes" holding the covered
+                # total; new workers emit both keys. Prefer covered_bytes.
+                tracker.covered_bytes += coverage.get(
+                    "covered_bytes", coverage["matched_bytes"]
+                )
+                tracker.ignored_whitespace_bytes += coverage[
+                    "ignored_whitespace_bytes"
+                ]
+                tracker.unmatched_non_whitespace_bytes += coverage[
+                    "unmatched_non_whitespace_bytes"
+                ]
+                tracker.fully_covered_documents += coverage[
+                    "fully_covered_documents"
+                ]
+                if coverage["unmatched_non_whitespace_bytes"]:
+                    total = coverage["total_bytes"]
+                    covered = coverage.get(
+                        "covered_bytes", coverage["matched_bytes"]
+                    )
+                    coverage_pct = covered / total * 100 if total else 0.0
+                    tracker.incomplete_documents.append(
+                        (
+                            coverage_pct,
+                            coverage["unmatched_non_whitespace_bytes"],
+                            coverage["file"],
+                        )
+                    )
+                for name, count in coverage["field_counts"].items():
+                    tracker.field_counts[name] += count
 
             if output:
                 print(output)
 
     tracker.print_report()
-    # Persist the plaintext summary only for full runs (no --limit/--sample
-    # slicing); sampled smoke tests must not clobber the dated baseline.
-    if args.limit is None and args.sample is None:
-        _write_dated_coverage_report(tracker)
 
 
 if __name__ == "__main__":

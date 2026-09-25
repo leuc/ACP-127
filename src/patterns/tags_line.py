@@ -56,6 +56,9 @@ _NA_VALUES = {"n/a", "na", ""}
 
 def tags_line():
     """Build pattern that matches the TAGS line."""
+    from .subject_line import ParseSubject
+
+    ParseTags.dependency = (FindTagsCandidates, ParseInfo, ParseSubject)
     rebulk = Rebulk()
     rebulk.rules(FindTagsCandidates, ParseTags)
     return rebulk
@@ -68,27 +71,20 @@ class FindTagsCandidates(Rule):
     dependency = BuildMessageContent
 
     def when(self, matches, context):
-        from ..content_view import get_view
-
         mc = matches.named("message_content")
-        view = get_view(context)
-        if not mc or view is None:
+        if not mc:
             return False
 
-        mc_text = view.text
+        mc_text = mc[0].value
+        mc_start = mc[0].start
         candidates = []
         for found in _TAGS_RE.finditer(mc_text):
-            bounding = view.clean_to_raw_bounding(found.start(), found.end())
-            if bounding is None:
-                continue
             candidates.append(
                 Match(
-                    bounding[0],
-                    bounding[1],
+                    mc_start + found.start(),
+                    mc_start + found.end(),
                     value={
-                        "clean_start": found.start(),
-                        "clean_end": found.end(),
-                        "value_clean_start": found.start("value"),
+                        "value_start": mc_start + found.start("value"),
                     },
                     name="tags_marker",
                     tags=["tags_candidate", "message_content"],
@@ -122,86 +118,42 @@ class ParseTags(Rule):
     """
 
     priority = 31
-    # Needs ParseSubject's upper bound; the full triple is set once in
-    # builder.py (avoids a circular import here -- subject_line imports
-    # FindTagsCandidates from this module).
     dependency = (FindTagsCandidates, ParseInfo)
 
     def when(self, matches, context):
-        from ..content_view import (
-            TAG_HEADER,
-            TAG_STRIP,
-            ZONE_CLUSTER,
-            get_view,
-            register_field_span,
-        )
-
         mc = matches.named("message_content")
-        view = get_view(context)
-        if not mc or view is None:
+        if not mc:
             return False
 
-        mc_text = view.text
+        mc_text = mc[0].value
+        mc_start = mc[0].start
+        mc_end = mc_start + len(mc_text)
 
-        info_matches = list(matches.named("info"))
-        if info_matches:
-            info_ends = []
-            for m in info_matches:
-                clean = view.raw_to_clean(m.end - 1)
-                if clean is not None:
-                    info_ends.append(clean + 1)
-            lower_bound = max(info_ends) if info_ends else 0
-        else:
-            lower_bound = 0
+        info_matches = matches.named("info")
+        lower_bound = max((m.end for m in info_matches), default=mc_start)
 
-        subject_matches = list(matches.named("subject"))
-        if subject_matches:
-            subject_starts = []
-            for m in subject_matches:
-                clean = view.raw_to_clean(m.start)
-                if clean is not None:
-                    subject_starts.append(clean)
-            upper_bound = min(subject_starts) if subject_starts else len(mc_text)
-        else:
-            upper_bound = len(mc_text)
-        inline_boundaries = []
-        for name in ("subject", "reference"):
-            for match in matches.named(name):
-                clean = view.raw_to_clean(match.start)
-                if clean is not None:
-                    inline_boundaries.append(clean)
+        subject_matches = matches.named("subject")
+        upper_bound = min((m.start for m in subject_matches), default=mc_end)
+        inline_boundaries = [
+            match.start
+            for name in ("subject", "reference")
+            for match in matches.named(name)
+        ]
 
-        # Clean intervals of routing matches for the inside-routing check.
-        routing_intervals = []
-        for match in matches.tagged("message_content"):
-            if match.name in {"to", "info"}:
-                clean_start = view.raw_to_clean(match.start)
-                clean_end = view.raw_to_clean(match.end - 1)
-                if clean_start is not None and clean_end is not None:
-                    routing_intervals.append((clean_start, clean_end + 1))
+        routing_matches = [
+            match
+            for match in matches.tagged("message_content")
+            if match.name in {"to", "info"}
+        ]
 
         # ParseInfo's continuation-line collection can run past the actual
         # INFO addressee block when no blank line separates it from the
         # following header lines, inflating info.end past subject.start.
-        # An inverted window is a diagnostic, not a reason to reset the
-        # lower bound to the beginning of the body: fall back to the end
-        # of the joint routing window (the structurally exact FM-block
-        # end) instead.
+        # Rather than trust an inverted window, fall back to not
+        # restricting from below in that case (still bounded above by
+        # SUBJECT, which is unaffected).
         if lower_bound >= upper_bound:
-            from .routing import walk_routing as _walk
-
-            walked = _walk(mc_text)
-            lower_bound = walked["header_end"] if walked is not None else 0
-            if lower_bound >= upper_bound:
-                context.setdefault("_diagnostics", []).append(
-                    {
-                        "field": "tags",
-                        "type": "inverted_window",
-                        "lower_bound": lower_bound,
-                        "upper_bound": upper_bound,
-                    }
-                )
-                return False
+            lower_bound = mc_start
 
         first_m = None
         first_value = None
@@ -213,25 +165,10 @@ class ParseTags(Rule):
             matches.tagged("tags_candidate"), key=lambda match: match.start
         )
         for candidate in candidates:
-            value = candidate.value
-            if isinstance(value, dict) and "clean_start" in value:
-                clean_start = value["clean_start"]
-                clean_end = value["clean_end"]
-                value_clean_start = value["value_clean_start"]
-            else:
-                # Legacy candidate without clean offsets: project endpoints.
-                clean_start = view.raw_to_clean(candidate.start)
-                clean_end = (
-                    view.raw_to_clean(candidate.end - 1) + 1
-                    if view.raw_to_clean(candidate.end - 1) is not None
-                    else None
-                )
-                value_clean_start = None
-                if clean_start is None or clean_end is None:
-                    continue
-            abs_start = clean_start
+            abs_start = candidate.start
             inside_routing = any(
-                start <= abs_start < end for start, end in routing_intervals
+                routing.start <= abs_start < routing.end
+                for routing in routing_matches
             )
             in_header_window = lower_bound <= abs_start < upper_bound
             if not (inside_routing or in_header_window):
@@ -242,34 +179,29 @@ class ParseTags(Rule):
             candidate_boundaries = [
                 boundary
                 for boundary in inline_boundaries
-                if clean_start < boundary < clean_end
+                if candidate.start < boundary < candidate.end
             ]
-            clean_candidate_end = min(
-                clean_end,
+            candidate_end = min(
+                candidate.end,
                 upper_bound,
                 *candidate_boundaries,
             )
-            if value_clean_start is None:
-                continue
-            if clean_candidate_end <= value_clean_start:
+            value_start = candidate.value["value_start"]
+            if candidate_end <= value_start:
                 continue
             candidate_value = mc_text[
-                value_clean_start:clean_candidate_end
+                value_start - mc_start : candidate_end - mc_start
             ].strip()
-            # Reject bare punctuation, zero-token values and values
-            # beginning with another header label.
             if not candidate_value:
-                continue
-            if not any(ch.isalnum() for ch in candidate_value):
                 continue
             if first_m is None:
                 first_m = candidate
                 first_value = candidate_value
-                first_end = clean_candidate_end
+                first_end = candidate_end
             if candidate_value.lower() not in _NA_VALUES:
                 t_m = candidate
                 t_value = candidate_value
-                t_end = clean_candidate_end
+                t_end = candidate_end
                 break
 
         t_m = t_m or first_m
@@ -277,26 +209,14 @@ class ParseTags(Rule):
             return False
 
         value = t_value if t_value is not None else first_value
-        clean_match_end = t_end if t_end is not None else first_end
-        t_clean = (
-            t_m.value["clean_start"]
-            if isinstance(t_m.value, dict) and "clean_start" in t_m.value
-            else None
-        )
-        if t_clean is None:
-            t_clean = view.raw_to_clean(t_m.start)
-            if t_clean is None:
-                return False
-        bounding = view.clean_to_raw_bounding(t_clean, clean_match_end)
-        if bounding is None:
-            return False
-        register_field_span(context, "tags", t_clean, clean_match_end)
+        match_end = t_end if t_end is not None else first_end
+
         return Match(
-            bounding[0],
-            bounding[1],
+            t_m.start,
+            match_end,
             value=value,
             name="tags",
-            tags=["message_content", ZONE_CLUSTER, TAG_STRIP, TAG_HEADER],
+            tags=["message_content"],
         )
 
     def then(self, matches, when_response, context):
