@@ -68,9 +68,5 @@ def classification():
         tags=["classification"],
         flags=re.MULTILINE | re.IGNORECASE,
         formatter=_classification_value,
-        # Private candidate: only the ExtractClassificationMarker aggregate
-        # (list of unique values) may serialize. Rejected candidates stay
-        # in the body text but must never leak as raw strings into JSON.
-        private=True,
     )
     return rebulk
