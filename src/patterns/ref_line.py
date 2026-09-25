@@ -32,31 +32,9 @@ _REF_RE = re.compile(
     re.MULTILINE | re.DOTALL | re.IGNORECASE,
 )
 
-# Continuation lines with lettered-enumeration shape ("(A) ...", "B. ...",
-# "0) ...", "1. ..."). The letter slot is a single letter on purpose:
-# two-letter abbreviations ("MR.", "DR.", "NO.", "ST.") are prose, not
-# enumerators. Leading dashes are tolerated ("-- 0) ...").
-_ENUM_CONT_RE = re.compile(
-    r"^[ \t-]*(?:\([A-Z0-9]{1,3}\)|[A-Z][.\):\-]|\d{1,3}[.\):\-])[ \t]+\S"
-)
-
-# Reference tokens that mark a continuation as reference content rather
-# than body prose: DTG filing-time fragments, MSG/DTG/NOTAL/LTR designators
-# and STATION+number runs. Deliberately excluded: REFTEL/SEPTEL (common in
-# prose about reftels), bare month dates ("AUGUST 6" is prose as often as
-# reference), and short digit runs ("SEPT 11", "(365-1429)" fire on prose).
-_REF_TOKEN_RE = re.compile(
-    r"\(\s*[A-Z0-9]{1,3}\s*\)"
-    r"|\b\d{6}Z\b"
-    r"|\b(?:MSG|DTG|NOTAL|LTR)\b"
-    r"|\b[A-Z][A-Z./-]{1,14} \d{3,6}\b"
-)
-
-# Wrap tails are short by nature (a wrapped fragment, not a new sentence);
-# 40 splits the audited sample cleanly (genuine tails max 39, body
-# sentences min 42). Used only under an explicit colon header with an
-# unterminated block -- never alone as proof of reference shape.
-_MAX_WRAP_TAIL = 40
+# Continuation lines with lettered-enumeration shape: the only sanctioned
+# multi-line reference form ("(A) ...", "A. ...", "B) ...", "1. ...").
+_ENUM_CONT_RE = re.compile(r"^[ \t]*(?:\([A-Z0-9]{1,3}\)|[A-Z0-9]{1,3}[.\):\-])[ \t]+")
 
 # Lines that end a REF block: a blank line, another header label, a
 # section marker, or body-start evidence. The REF value must not swallow
@@ -85,19 +63,18 @@ def _is_ref_stop_line(stripped):
     return any(pattern.match(stripped) for pattern in _REF_STOP_RES)
 
 
-def _ref_block_end(mc_text, label_line_start, colon_header):
+def _ref_block_end(mc_text, label_line_start):
     """Return the end of the REF continuation block (single structural walk).
 
-    Replaces the old 200-character cap. The label line always belongs to
-    the block; a following line joins while it is non-blank, is not a
-    next-header label, section marker, or body-start evidence, and either
-    has lettered-enumeration shape or -- under an explicit colon header
-    with an unterminated block -- is a short wrap tail or carries a
-    reference token (see _join_continuation). Colon-less ``REFERENCE TO
-    ...`` prose keeps the strict enumeration gate, so body sentences
-    accepted as candidates by the legacy line-start rule stop at the
-    label line instead of absorbing whole paragraphs. The walk returns
-    the end of the last kept line (no trailing newline).
+    Replaces the old 200-character cap: the label line always belongs to
+    the block; a following line joins only while it is non-blank, is not
+    a next-header label, section marker, or body-start evidence, AND has
+    lettered-enumeration shape (``(A)``/``A.``/``B)``/``1.`` ... -- the
+    sanctioned multi-line reference form). Plain prose continuations
+    (``REFERENCE TO X...`` sentences in body text, which the legacy
+    line-start rule accepts as candidates) stop the block at the label
+    line instead of absorbing whole paragraphs. The walk returns the end
+    of the last kept line (no trailing newline).
     """
     end = label_line_start
     offset = label_line_start
@@ -113,10 +90,10 @@ def _ref_block_end(mc_text, label_line_start, colon_header):
         stripped = line.strip()
         if first:
             first = False
-        elif _is_block_stop(line, stripped, mc_text[label_line_start:end], colon_header):
-            break
-        elif not _join_continuation(
-            line, mc_text[label_line_start:end], colon_header
+        elif (
+            not stripped
+            or _is_ref_stop_line(stripped)
+            or not _ENUM_CONT_RE.match(line)
         ):
             break
         end = line_end
@@ -124,46 +101,6 @@ def _ref_block_end(mc_text, label_line_start, colon_header):
             break
         offset = line_end + 1
     return end
-
-
-def _is_block_stop(line, stripped, block_so_far, colon_header):
-    """Return whether a line ends the REF continuation block."""
-    if not stripped:
-        return True
-    if (
-        colon_header
-        and _NUMBER_FRAGMENT_RE.match(line)
-        and _BLOCK_TERMINATOR_RE.search(block_so_far) is None
-    ):
-        # Wrapped MRN number ("(C) LONDON" / "6071."): not a body-start
-        # numbered paragraph, even though it matches the body-start shape.
-        return False
-    return _is_ref_stop_line(stripped)
-
-
-# A bare short number line (digits plus optional trailing period/paren):
-# the wrapped tail of an MRN, not body prose.
-_NUMBER_FRAGMENT_RE = re.compile(r"^\s*\d{1,6}[.)]?\s*$")
-
-
-def _join_continuation(line, block_so_far, colon_header):
-    """Return whether a continuation line joins the REF block."""
-    if _ENUM_CONT_RE.match(line):
-        return True
-    if (
-        not colon_header
-        or _BLOCK_TERMINATOR_RE.search(block_so_far) is not None
-    ):
-        return False
-    stripped = line.strip()
-    # An explicit colon header continues an unterminated block with a
-    # short wrap tail ("... COORDINATING" / "COMMISSION TO JONES, NIH/FIC")
-    # or a reference-token line (wrapped MRN/DTG/enumeration detail).
-    # Full-width body sentences without reference tokens stop the block.
-    return len(stripped) < _MAX_WRAP_TAIL or _REF_TOKEN_RE.search(line) is not None
-
-
-_BLOCK_TERMINATOR_RE = re.compile(r'[.!?]["\']?\s*$')
 
 
 def ref_line():
@@ -202,8 +139,7 @@ class FindRefCandidates(Rule):
                 if line_end >= 0:
                     candidate_end = min(candidate_end, line_end)
             else:
-                colon_header = ":" in found.group("separator")
-                candidate_end = _ref_block_end(mc_text, line_start, colon_header)
+                candidate_end = _ref_block_end(mc_text, line_start)
             tags = ["reference_candidate", "message_content"]
             tags.append("inline_reference" if inline else "legacy_reference")
             bounding = view.clean_to_raw_bounding(found.start(), candidate_end)
